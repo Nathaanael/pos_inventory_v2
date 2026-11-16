@@ -1,4 +1,5 @@
 import { toast } from '../inventory/format';
+import calculateTaxes from './tax-calculator';
 
 /**
  * Layar kasir (dipindah dari script inline filament/kasir/pages/pos.blade.php).
@@ -24,6 +25,7 @@ export default (config = {}) => ({
     recent: config.recent ?? [],          // transaksi terakhir hari ini
     fnb: config.fnb ?? { tables: false, takeAway: false },
     tables: config.tables ?? [],          // [{ id, number, name, occupied }]
+    taxRules: config.taxRules ?? [],      // master Pajak & Biaya Layanan (modul FNB)
     search: '',
     activeCategory: null,
     cart: [],                             // [{ id, qty }]
@@ -156,8 +158,23 @@ export default (config = {}) => ({
         return this.cart.reduce((s, l) => s + l.qty, 0);
     },
 
-    get total() {
+    /** Total harga barang (sebelum pajak/biaya layanan exclusive). */
+    get subtotal() {
         return this.lines.reduce((s, l) => s + this.price(l.item) * l.qty, 0);
+    },
+
+    /** Rincian pajak & biaya layanan (rumus sama dengan TaxCalculator di server). */
+    get taxes() {
+        return calculateTaxes(
+            this.lines.map((l) => ({ subtotal: this.price(l.item) * l.qty, tax_rate: l.item.tax_rate, tax_method: l.item.tax_method })),
+            this.taxRules,
+            this.hasFnb ? this.orderType : null,
+        );
+    },
+
+    /** Yang dibayar pelanggan. */
+    get total() {
+        return this.taxes.grand_total;
     },
 
     get paidNumber() {

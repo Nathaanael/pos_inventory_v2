@@ -12,6 +12,7 @@ use App\Models\Item;
 use App\Models\Outbound;
 use App\Models\StoreSetting;
 use App\Services\StockService;
+use App\Services\TaxCalculator;
 use App\Services\ThermalPrintService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -45,6 +46,7 @@ class KasirController extends Controller
             // Dari halaman Meja: /kasir/pos?meja=ID langsung memilih meja itu.
             'preselectTable' => $request->integer('meja') ?: null,
             'hasWholesale' => StoreSetting::hasFeature(Feature::WholesalePrice),
+            'taxRules' => app(TaxCalculator::class)->rules(),
         ]);
     }
 
@@ -182,12 +184,13 @@ class KasirController extends Controller
     private function catalog(): array
     {
         $showImages = StoreSetting::hasFeature(Feature::ItemImage);
+        $usesTaxes = StoreSetting::usesTaxes();
 
         return Item::query()
             ->where('is_active', true)
             ->with('unit:id,name')
             ->orderBy('name')
-            ->get(['id', 'code', 'barcode', 'name', 'category_id', 'unit_id', 'harga_jual_retail', 'harga_jual_grosir', 'current_stock', 'image'])
+            ->get(['id', 'code', 'barcode', 'name', 'category_id', 'unit_id', 'harga_jual_retail', 'harga_jual_grosir', 'current_stock', 'image', 'tax_rate', 'tax_method'])
             ->map(fn (Item $item) => [
                 'id' => $item->id,
                 'code' => $item->code,
@@ -199,6 +202,9 @@ class KasirController extends Controller
                 'grosir' => (float) $item->harga_jual_grosir,
                 'stock' => (int) $item->current_stock,
                 'image' => $showImages && $item->image ? Storage::disk('public')->url($item->image) : null,
+                // Pajak barang (null = ikut master). Hanya dipakai bila modul memakai pajak.
+                'tax_rate' => $usesTaxes && $item->tax_rate !== null ? (float) $item->tax_rate : null,
+                'tax_method' => $usesTaxes ? $item->tax_method : null,
             ])
             ->all();
     }
@@ -217,14 +223,14 @@ class KasirController extends Controller
             ->with('diningTable:id,number')
             ->latest('id')
             ->limit(8)
-            ->get(['id', 'transaction_code', 'customer_name', 'status', 'total_amount', 'created_at', 'order_type', 'dining_table_id'])
+            ->get(['id', 'transaction_code', 'customer_name', 'status', 'total_amount', 'grand_total', 'created_at', 'order_type', 'dining_table_id'])
             ->map(fn (Outbound $o) => [
                 'id' => $o->id,
                 'no' => Str::afterLast($o->transaction_code, '-'),
                 'customer' => $o->customer_name ?: 'Pelanggan umum',
                 'order' => $o->orderLabel(),
                 'items' => $o->items_count,
-                'total' => (float) $o->total_amount,
+                'total' => $o->payableTotal(),
                 'time' => $o->created_at->format('H:i'),
                 'status' => $o->status->value,
                 'print_url' => $o->status === TransactionStatus::COMPLETED ? route('outbound.print', $o) : null,
@@ -271,7 +277,7 @@ class KasirController extends Controller
     {
         return DiningTable::query()
             ->active()
-            ->with(['activeOrders' => fn ($q) => $q->orderBy('created_at')->select(['id', 'dining_table_id', 'transaction_code', 'customer_name', 'total_amount', 'created_at'])])
+            ->with(['activeOrders' => fn ($q) => $q->orderBy('created_at')->select(['id', 'dining_table_id', 'transaction_code', 'customer_name', 'total_amount', 'grand_total', 'created_at'])])
             ->orderByRaw('LENGTH(number), number')
             ->get()
             ->map(function (DiningTable $table) {
@@ -283,14 +289,14 @@ class KasirController extends Controller
                     'name' => $table->name,
                     'capacity' => $table->capacity,
                     'occupied' => $orders->isNotEmpty(),
-                    'total' => (float) $orders->sum('total_amount'),
+                    'total' => (float) $orders->sum(fn (Outbound $o) => $o->payableTotal()),
                     // waktu mulai duduk (ISO) → lama duduk dihitung di browser
                     'since' => $orders->first()?->created_at?->toIso8601String(),
                     'customer' => $orders->pluck('customer_name')->filter()->unique()->implode(', '),
                     'orders' => $orders->map(fn (Outbound $o) => [
                         'code' => $o->transaction_code,
                         'customer' => $o->customer_name,
-                        'total' => (float) $o->total_amount,
+                        'total' => $o->payableTotal(),
                         'time' => $o->created_at->format('H:i'),
                     ])->values()->all(),
                 ];
@@ -333,6 +339,7 @@ class KasirController extends Controller
 
         $items = Item::query()->where('is_active', true)->whereIn('id', array_keys($quantities))->get()->keyBy('id');
         $lines = [];
+        $taxLines = [];
 
         foreach ($quantities as $id => $qty) {
             $item = $items->get($id);
@@ -355,9 +362,12 @@ class KasirController extends Controller
                 'cogs_price' => (float) $item->calculateFifoCogs($qty),
                 'subtotal' => $price * $qty,
             ];
+            $taxLines[] = ['subtotal' => $price * $qty, 'tax_rate' => $item->tax_rate, 'tax_method' => $item->tax_method];
         }
 
-        $total = collect($lines)->sum('subtotal');
+        // Pajak & biaya layanan (modul FNB). Yang dibayar = grand_total.
+        $taxes = app(TaxCalculator::class)->calculate($taxLines, $fnb['order_type']);
+        $total = $taxes['grand_total'];
         $paidAmount = isset($data['paid_amount']) ? (float) $data['paid_amount'] : null;
 
         if ($paymentMethod === 'tunai') {
@@ -378,6 +388,10 @@ class KasirController extends Controller
                 'notes' => filled($data['notes'] ?? null) ? mb_substr(trim($data['notes']), 0, 500) : null,
                 'order_type' => $fnb['order_type'],
                 'dining_table_id' => $fnb['dining_table_id'],
+                'service_amount' => $taxes['service_amount'],
+                'tax_amount' => $taxes['tax_amount'],
+                'grand_total' => $taxes['grand_total'],
+                'tax_details' => $taxes['details'] ?: null,
             ], $lines);
         } catch (Throwable $e) {
             report($e);

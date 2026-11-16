@@ -72,8 +72,10 @@
                     <x-common.form.select name="brand_id" class="h-10 sm:w-40" :value="request('brand_id')" placeholder="Semua merk"
                         :options="$brandOptions" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter merk" />
                 @endif
-                <x-common.form.select name="supplier" class="h-10 sm:w-44" :value="request('supplier')" placeholder="Semua supplier"
-                    :options="$supplierOptions" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter supplier" />
+                @if ($usesSuppliers)
+                    <x-common.form.select name="supplier" class="h-10 sm:w-44" :value="request('supplier')" placeholder="Semua supplier"
+                        :options="$supplierOptions" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter supplier" />
+                @endif
                 <x-common.form.select name="is_active" class="h-10 sm:w-36" :value="request('is_active')" placeholder="Semua status"
                     :options="['1' => 'Aktif', '0' => 'Tidak Aktif']" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter status aktif" />
             </x-slot:filters>
@@ -90,7 +92,9 @@
                     <th class="table-th min-w-28">Kode</th>
                     <th class="table-th min-w-32">Barcode</th>
                     <th class="table-th min-w-52">Nama</th>
-                    <th class="table-th min-w-40">Supplier</th>
+                    @if ($usesSuppliers)
+                        <th class="table-th min-w-40">Supplier</th>
+                    @endif
                     <th class="table-th min-w-32">Harga Beli</th>
                     <th class="table-th min-w-28">Stok Saat Ini</th>
                     <th class="table-th min-w-40">Aktivitas Terakhir</th>
@@ -110,6 +114,7 @@
                         <td class="table-td whitespace-nowrap">{{ $item->code }}</td>
                         <td class="table-td whitespace-nowrap">{{ $item->barcode ?: '-' }}</td>
                         <td class="table-td font-medium text-gray-800 dark:text-white/90">{{ $item->name }}</td>
+                        @if ($usesSuppliers)
                         <td class="table-td">
                             @if ($suppliers->isNotEmpty())
                                 <x-ui.badge size="sm" color="primary" class="whitespace-nowrap">
@@ -119,9 +124,10 @@
                                 <span class="text-gray-400">-</span>
                             @endif
                         </td>
+                        @endif
                         <td class="table-td whitespace-nowrap">
                             <span class="text-gray-800 dark:text-white/90">{{ $rupiah($item->harga_beli) }}</span>
-                            @if ($supplierCount > 1)
+                            @if ($usesSuppliers && $supplierCount > 1)
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $supplierCount }} supplier</span>
                             @endif
                         </td>
@@ -153,7 +159,7 @@
                         </td>
                     </tr>
                 @empty
-                    <x-common.table-empty colspan="9" title="Belum ada barang" />
+                    <x-common.table-empty :colspan="$usesSuppliers ? 9 : 8" title="Belum ada barang" />
                 @endforelse
             </tbody>
         </x-common.table-card>

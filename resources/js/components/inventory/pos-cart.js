@@ -1,4 +1,5 @@
 import { rupiah, toast } from './format';
+import calculateTaxes from '../kasir/tax-calculator';
 
 /**
  * Layar POS (pengganti trait Livewire InteractsWithPosCart).
@@ -25,6 +26,7 @@ export default (config = {}) => ({
     saving: false,
     errors: {},
     rupiah,
+    taxRules: config.taxRules ?? [],
 
     init() {
         this.fetchItems();
@@ -130,6 +132,18 @@ export default (config = {}) => ({
 
     get totalAmount() {
         return this.cart.reduce((sum, l) => sum + this.lineTotal(l), 0);
+    },
+
+    /** Pajak & biaya layanan (modul FNB); POS admin tanpa tipe pesanan. */
+    get taxes() {
+        return calculateTaxes(
+            this.cart.map((l) => ({ subtotal: this.lineTotal(l), tax_rate: l.tax_rate, tax_method: l.tax_method })),
+            this.taxRules,
+        );
+    },
+
+    get grandTotal() {
+        return this.taxes.grand_total;
     },
 
     get totalCogs() {

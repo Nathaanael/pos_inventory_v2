@@ -40,7 +40,9 @@
                     </th>
                     <th class="table-th min-w-44">Kode Transaksi</th>
                     <th class="table-th min-w-40">Tanggal</th>
-                    <th class="table-th min-w-44">Supplier</th>
+                    @if ($usesSuppliers)
+                        <th class="table-th min-w-44">Supplier</th>
+                    @endif
                     <th class="table-th min-w-36">Total Nominal</th>
                     <th class="table-th min-w-28">Status</th>
                     <th class="table-th w-16"></th>
@@ -60,7 +62,9 @@
                             @include('pages.inventory.partials.copyable', ['text' => $inbound->transaction_code])
                         </td>
                         <td class="table-td whitespace-nowrap">{{ Format::date($inbound->date) }}</td>
-                        <td class="table-td">{{ $inbound->supplier?->name ?? '-' }}</td>
+                        @if ($usesSuppliers)
+                            <td class="table-td">{{ $inbound->supplier?->name ?? '-' }}</td>
+                        @endif
                         <td class="table-td whitespace-nowrap">{{ Format::rupiah($inbound->total_amount) }}</td>
                         <td class="table-td"><x-ui.badge size="sm" :color="$statusColor">{{ $statusLabel }}</x-ui.badge></td>
                         <td class="table-td text-end">
@@ -85,7 +89,7 @@
                         </td>
                     </tr>
                 @empty
-                    <x-common.table-empty colspan="7" title="Belum ada barang masuk" />
+                    <x-common.table-empty :colspan="$usesSuppliers ? 7 : 6" title="Belum ada barang masuk" />
                 @endforelse
             </tbody>
         </x-common.table-card>

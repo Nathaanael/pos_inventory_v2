@@ -163,7 +163,18 @@ class ThermalPrintService
         $totalQty = number_format($outbound->items->sum('quantity'));
         $printer->text($this->twoColumns("Qty", $totalQty) . "\n");
 
-        $total = "Rp" . number_format($outbound->total_amount, 0, ',', '.');
+        // Pajak & biaya layanan (modul FNB)
+        if (! empty($outbound->tax_details)) {
+            $printer->setEmphasis(false);
+            $printer->text($this->twoColumns("Subtotal", "Rp" . number_format($outbound->total_amount, 0, ',', '.')) . "\n");
+            foreach ($outbound->tax_details as $tax) {
+                $label = $tax['name'] . ' ' . (float) $tax['rate'] . '%' . ($tax['included'] ? ' (incl)' : '');
+                $printer->text($this->twoColumns($label, "Rp" . number_format($tax['amount'], 0, ',', '.')) . "\n");
+            }
+            $printer->setEmphasis(true);
+        }
+
+        $total = "Rp" . number_format($outbound->payableTotal(), 0, ',', '.');
         $printer->text($this->twoColumns("TOTAL", $total) . "\n");
 
         $printer->setEmphasis(false);
@@ -175,7 +186,7 @@ class ThermalPrintService
 
         if ($outbound->payment_method === 'tunai' && $outbound->paid_amount) {
             $printer->text($this->twoColumns("Tunai", "Rp" . number_format($outbound->paid_amount, 0, ',', '.')) . "\n");
-            $printer->text($this->twoColumns("Kembali", "Rp" . number_format($outbound->paid_amount - $outbound->total_amount, 0, ',', '.')) . "\n");
+            $printer->text($this->twoColumns("Kembali", "Rp" . number_format($outbound->paid_amount - $outbound->payableTotal(), 0, ',', '.')) . "\n");
         }
         $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
     }

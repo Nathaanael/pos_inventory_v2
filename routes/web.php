@@ -80,7 +80,8 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::delete('/{unit}/force', 'forceDelete')->name('force-delete')->withTrashed();
         });
 
-        Route::controller(SupplierController::class)->prefix('suppliers')->name('suppliers.')->group(function () {
+        // Modul FNB tidak memakai supplier.
+        Route::controller(SupplierController::class)->prefix('suppliers')->name('suppliers.')->middleware('module:suppliers')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');
             Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
@@ -102,6 +103,15 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::put('/{meja}', 'update')->name('update');
             Route::patch('/{meja}/toggle', 'toggle')->name('toggle');
             Route::delete('/{meja}', 'destroy')->name('destroy');
+        });
+
+        // Pajak & Biaya Layanan (modul FNB)
+        Route::controller(\App\Http\Controllers\Master\TaxController::class)->prefix('pajak')->name('taxes.')->middleware('module:taxes')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('/{tax}', 'update')->name('update');
+            Route::patch('/{tax}/toggle', 'toggle')->name('toggle');
+            Route::delete('/{tax}', 'destroy')->name('destroy');
         });
 
         // Inventaris

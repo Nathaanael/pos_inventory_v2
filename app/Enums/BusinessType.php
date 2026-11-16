@@ -63,6 +63,23 @@ enum BusinessType: string
         return $this->defaultFeatures();
     }
 
+    /* ----------------------------- Kemampuan modul ----------------------------- */
+
+    /**
+     * Modul memakai data supplier (Master Supplier, harga beli per supplier, supplier di Barang Masuk)?
+     * FNB tidak: harga beli (HPP) diisi langsung di barang.
+     */
+    public function usesSuppliers(): bool
+    {
+        return $this !== self::Makanan;
+    }
+
+    /** Modul memakai master Pajak & Biaya Layanan (PB1, service charge) di transaksi? */
+    public function usesTaxes(): bool
+    {
+        return $this === self::Makanan;
+    }
+
     /**
      * @deprecated Pakai features(). Disimpan agar kode lama tetap jalan.
      *

@@ -6,6 +6,7 @@
             itemsUrl: @js(route('outbounds.pos-items')),
             storeUrl: @js(route('outbounds.store')),
             date: @js(now()->format('Y-m-d')),
+            taxRules: @js($taxRules),
         })"
         class="grid grid-cols-1 gap-6 lg:grid-cols-[58fr_42fr]">
 
@@ -164,9 +165,15 @@
                     <span>Margin</span>
                     <span class="text-success-600 dark:text-success-500" x-text="margin > 0 ? rupiah(margin) : '-'"></span>
                 </div>
+                <template x-for="d in taxes.details" :key="d.name + d.rate + d.method">
+                    <div class="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                        <span x-text="d.name + ' ' + d.rate + '%' + (d.included ? ' (termasuk)' : '')"></span>
+                        <span class="text-gray-800 dark:text-white/90" x-bind:class="d.included && 'italic'" x-text="(d.included ? '' : '+') + rupiah(d.amount)"></span>
+                    </div>
+                </template>
                 <div class="flex items-center justify-between border-t border-dashed border-gray-200 pt-3 dark:border-gray-700">
                     <span class="text-base font-semibold text-gray-800 dark:text-white/90">Total</span>
-                    <span class="text-xl font-bold text-brand-500 dark:text-brand-400" x-text="rupiah(totalAmount)"></span>
+                    <span class="text-xl font-bold text-brand-500 dark:text-brand-400" x-text="rupiah(grandTotal)"></span>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3 pt-3">

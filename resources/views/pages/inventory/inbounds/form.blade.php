@@ -30,12 +30,14 @@
                             :aria-invalid="$invalid('date')" />
                     </x-common.form.field>
 
-                    <x-common.form.field label="Supplier" for="supplier_id" required>
-                        <x-common.form.select id="supplier_id" name="supplier_id" :options="$supplierOptions" placeholder="Pilih supplier" required
-                            x-model="supplierId" x-on:change="onSupplierChange()" :aria-invalid="$invalid('supplier_id')" />
-                    </x-common.form.field>
+                    @if ($usesSuppliers)
+                        <x-common.form.field label="Supplier" for="supplier_id" required>
+                            <x-common.form.select id="supplier_id" name="supplier_id" :options="$supplierOptions" placeholder="Pilih supplier" required
+                                x-model="supplierId" x-on:change="onSupplierChange()" :aria-invalid="$invalid('supplier_id')" />
+                        </x-common.form.field>
+                    @endif
 
-                    <x-common.form.field label="No. Invoice Supplier" for="supplier_invoice_no">
+                    <x-common.form.field :label="$usesSuppliers ? 'No. Invoice Supplier' : 'No. Invoice / Nota Pembelian'" for="supplier_invoice_no">
                         <x-ui.input id="supplier_invoice_no" name="supplier_invoice_no" value="{{ $value('supplier_invoice_no') }}" maxlength="50" />
                     </x-common.form.field>
 

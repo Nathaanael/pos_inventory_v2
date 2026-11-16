@@ -25,7 +25,17 @@ class Outbound extends Model
         'total_amount' => 'decimal:2',
         'order_type' => OrderType::class,
         'table_released_at' => 'datetime',
+        'tax_details' => 'array',
     ];
+
+    /**
+     * Yang dibayar pelanggan: subtotal + pajak/biaya layanan exclusive.
+     * Transaksi lama (sebelum ada pajak) tidak punya grand_total → pakai total_amount.
+     */
+    public function payableTotal(): float
+    {
+        return (float) ($this->grand_total ?? $this->total_amount);
+    }
 
     public function diningTable()
     {

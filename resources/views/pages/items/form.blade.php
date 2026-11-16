@@ -113,11 +113,19 @@
                     </div>
                 </x-common.component-card>
 
-                <x-common.component-card :title="$hasWholesale ? 'Harga Jual & Pengaturan Grosir' : 'Harga Jual'" desc="Harga jual berlaku sama untuk semua supplier">
+                <x-common.component-card :title="$hasWholesale ? 'Harga Jual & Pengaturan Grosir' : ($usesSuppliers ? 'Harga Jual' : 'Harga')"
+                    :desc="$usesSuppliers ? 'Harga jual berlaku sama untuk semua supplier' : 'Harga jual ke pelanggan dan harga beli (modal) barang'">
                     <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
                         <x-common.form.field label="Harga Jual Retail" for="harga_jual_retail" required>
                             <x-common.form.money id="harga_jual_retail" name="harga_jual_retail" :value="$value('harga_jual_retail')" :invalid="$errors->has('harga_jual_retail')" />
                         </x-common.form.field>
+
+                        {{-- Modul tanpa supplier (FNB): HPP diisi langsung --}}
+                        @unless ($usesSuppliers)
+                            <x-common.form.field label="Harga Beli (HPP)" for="harga_beli" required hint="Modal per satuan, untuk menghitung laba">
+                                <x-common.form.money id="harga_beli" name="harga_beli" :value="$value('harga_beli')" :invalid="$errors->has('harga_beli')" />
+                            </x-common.form.field>
+                        @endunless
 
                         @if ($hasWholesale)
                             <x-common.form.field label="Harga Jual Grosir" for="harga_jual_grosir" required>
@@ -132,6 +140,27 @@
                     </div>
                 </x-common.component-card>
 
+                {{-- Pajak per barang (modul FNB): opsional, kosong = ikut master Pajak & Biaya Layanan --}}
+                @if ($usesTaxes)
+                    <x-common.component-card title="Pajak" desc="Opsional. Kosongkan untuk mengikuti master Pajak & Biaya Layanan.">
+                        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2" x-data="{ rate: @js(old('tax_rate', $item->tax_rate !== null ? (float) $item->tax_rate : '')) }">
+                            <x-common.form.field label="Persentase Pajak (%)" for="tax_rate">
+                                <div class="relative">
+                                    <x-ui.input type="number" id="tax_rate" name="tax_rate" x-model="rate" min="0" max="100" step="0.01" placeholder="Ikut master"
+                                        class="pe-10" :aria-invalid="$invalid('tax_rate')" />
+                                    <span class="pointer-events-none absolute end-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                                </div>
+                            </x-common.form.field>
+                            <x-common.form.field label="Tipe Pajak" for="tax_method" hint="Inclusive = sudah termasuk di harga jual; Exclusive = ditambahkan saat bayar.">
+                                <x-common.form.select id="tax_method" name="tax_method" :options="['exclusive' => 'Exclusive', 'inclusive' => 'Inclusive']"
+                                    :value="old('tax_method', $item->tax_method ?? 'exclusive')" x-bind:disabled="rate === '' || rate === null"
+                                    :aria-invalid="$invalid('tax_method')" />
+                            </x-common.form.field>
+                        </div>
+                    </x-common.component-card>
+                @endif
+
+                @if ($usesSuppliers)
                 <x-common.component-card title="Supplier & Harga Beli" desc="Satu barang bisa disuplai oleh banyak supplier dengan harga beli yang berbeda">
                     @error('suppliers')
                         <p class="text-sm text-error-500">{{ $message }}</p>
@@ -186,6 +215,7 @@
                         Tambah Supplier
                     </x-ui.button>
                 </x-common.component-card>
+                @endif
             </div>
 
             {{-- Kolom kanan --}}

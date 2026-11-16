@@ -13,6 +13,7 @@
         ],
         'Harga & Stok' => [
             'Harga Jual Retail' => $rupiah($item->harga_jual_retail),
+            'Harga Beli (HPP)' => $rupiah($item->harga_beli),
             'Harga Jual Grosir' => $rupiah($item->harga_jual_grosir),
             'Min Qty Grosir' => $item->min_grosir_qty,
             'Total Stok' => $item->current_stock,
@@ -20,6 +21,13 @@
             'Lokasi Rak' => $item->rack_location,
         ],
     ];
+    // Modul FNB: pajak per barang; tanpa supplier.
+    $usesSuppliers = \App\Models\StoreSetting::usesSuppliers();
+    if (\App\Models\StoreSetting::usesTaxes()) {
+        $sections['Harga & Stok']['Pajak'] = $item->tax_rate !== null
+            ? rtrim(rtrim(number_format($item->tax_rate, 2, ',', '.'), '0'), ',').'% · '.ucfirst((string) $item->tax_method)
+            : 'Ikut master';
+    }
     $imageUrl = $item->image ? \Illuminate\Support\Facades\Storage::disk('public')->url($item->image) : null;
 @endphp
 <div class="space-y-6">
@@ -59,6 +67,7 @@
         </div>
     </div>
 
+    @if ($usesSuppliers)
     <div class="rounded-2xl border border-gray-200 dark:border-gray-800">
         <div class="px-5 py-4">
             <h4 class="text-base font-semibold text-gray-800 dark:text-white/90">Supplier &amp; Harga Beli</h4>
@@ -91,4 +100,5 @@
             </table>
         </div>
     </div>
+@endif
 </div>

@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => RedirectKasirToPortal::class,
             'store.setup' => EnsureStoreIsSetUp::class,
             'feature' => EnsureFeatureEnabled::class,
+            'module' => \App\Http\Middleware\EnsureModuleCapability::class,
         ]);
 
         // Satu halaman login untuk semua role; setelah login diarahkan sesuai role.

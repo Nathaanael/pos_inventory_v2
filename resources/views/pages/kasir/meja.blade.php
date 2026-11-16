@@ -1,6 +1,11 @@
 @extends('layouts.kasir')
 
-{{-- Pantauan meja (dulu App\Filament\Kasir\Pages\Meja). Data diperbarui otomatis tiap 20 detik. --}}
+{{--
+    Pantauan meja (dulu App\Filament\Kasir\Pages\Meja). Data diperbarui otomatis tiap 20 detik.
+    Tampilan denah: tiap meja digambar dengan kursi di keempat sisi.
+      oranye = terisi (tagihan, lama duduk, kursi) · hijau = kosong.
+    Meja besar (> 6 kursi) dibuat memanjang dengan 3 kursi di kiri & kanan.
+--}}
 @section('content')
     <div x-data="{
             tables: @js($tables),
@@ -20,12 +25,15 @@
             },
             get busy() { return this.tables.filter((t) => t.occupied).length; },
             get free() { return this.tables.length - this.busy; },
+            get visible() { return this.tables.filter((t) => this.match(t)); },
             match(t) {
                 const q = this.search.trim().toLowerCase();
                 const okQ = !q || t.number.toLowerCase().includes(q) || (t.name ?? '').toLowerCase().includes(q) || (t.customer ?? '').toLowerCase().includes(q);
                 const okS = this.status === 'all' || (this.status === 'busy' ? t.occupied : !t.occupied);
                 return okQ && okS;
             },
+            isLong(t) { return (t.capacity ?? 0) > 6; },
+            sideChairs(t) { return this.isLong(t) ? 3 : 1; },
             duration(since) {
                 if (!since) return '';
                 const m = Math.max(0, Math.floor((this.now - new Date(since).getTime()) / 60000));
@@ -37,53 +45,101 @@
                 else window.location.href = @js(route('kasir.pos')) + '?meja=' + t.id;
             },
         }">
-        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+        {{-- Judul + tab --}}
+        <div class="mb-6 border-b border-gray-200 dark:border-gray-800">
             <h2 class="text-xl font-semibold text-gray-800 dark:text-white/90">Meja</h2>
-            <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                <span class="flex items-center gap-2"><i class="size-2.5 rounded-full bg-success-500"></i><span x-text="free + ' kosong'"></span></span>
-                <span class="flex items-center gap-2"><i class="size-2.5 rounded-full bg-warning-500"></i><span x-text="busy + ' terisi'"></span></span>
-            </div>
+            <nav class="mt-4 flex gap-6 text-sm">
+                <span class="-mb-px border-b-2 border-brand-500 pb-3 font-medium text-gray-800 dark:text-white/90">Status Real-time</span>
+                @if (auth()->user()?->isAdmin())
+                    <a href="{{ route('meja.index') }}" class="-mb-px border-b-2 border-transparent pb-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">Konfigurasi Meja</a>
+                @endif
+            </nav>
         </div>
 
         <div class="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 dark:border-gray-800 dark:bg-white/3">
-            <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <x-ui.input-group class="h-11 sm:w-80">
+            {{-- Toolbar --}}
+            <div class="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <x-ui.input-group class="h-10 sm:w-72">
                     <x-ui.input-group.addon align="inline-start">
                         <x-svg.search class="size-5 text-gray-400" />
                     </x-ui.input-group.addon>
                     <x-ui.input-group.input type="text" x-model="search" placeholder="Cari meja atau nama pelanggan" />
                 </x-ui.input-group>
-                <div class="flex gap-1 rounded-xl bg-gray-100 p-1 sm:w-72 dark:bg-white/5">
-                    @foreach (['all' => 'Semua', 'free' => 'Kosong', 'busy' => 'Terisi'] as $key => $label)
-                        <button type="button" x-on:click="status = @js($key)"
-                            class="flex h-9 flex-1 items-center justify-center rounded-lg text-sm font-medium transition-colors"
-                            x-bind:class="status === @js($key) ? 'bg-white text-gray-800 shadow-theme-xs dark:bg-gray-800 dark:text-white/90' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'">{{ $label }}</button>
-                    @endforeach
+
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                        <span class="flex items-center gap-2"><i class="size-2.5 rounded-full bg-success-400"></i><span x-text="free + ' kosong'"></span></span>
+                        <span class="flex items-center gap-2"><i class="size-2.5 rounded-full bg-orange-400"></i><span x-text="busy + ' terisi'"></span></span>
+                    </div>
+                    <x-common.form.select class="h-10 w-40" x-model="status" aria-label="Filter status"
+                        :options="['all' => 'Semua Status', 'free' => 'Kosong', 'busy' => 'Terisi']" />
                 </div>
             </div>
 
             <p x-show="!tables.length" class="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
                 Belum ada meja aktif. Minta admin menambahkan meja di menu <strong>Master Meja</strong>.
             </p>
+            <p x-show="tables.length && !visible.length" x-cloak class="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Meja tidak ditemukan.</p>
 
-            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-                <template x-for="t in tables" :key="t.id">
-                    <button type="button" x-show="match(t)" x-on:click="open(t)"
-                        x-bind:title="t.occupied ? 'Lihat pesanan meja ini' : 'Buat pesanan untuk meja ini'"
-                        class="flex min-h-36 flex-col items-start rounded-2xl border-2 p-4 text-start transition hover:-translate-y-0.5 hover:shadow-theme-md"
-                        x-bind:class="t.occupied ? 'border-warning-300 bg-warning-50 dark:border-warning-500/40 dark:bg-warning-500/10' : 'border-success-200 bg-success-50 dark:border-success-500/30 dark:bg-success-500/10'">
-                        <span class="text-3xl font-bold text-gray-800 dark:text-white/90" x-text="t.number"></span>
-                        <span x-show="t.name" class="text-sm text-gray-500 dark:text-gray-400" x-text="t.name"></span>
-                        <template x-if="t.occupied">
-                            <span class="mt-auto flex flex-wrap gap-1.5 pt-3">
-                                <span class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-300" x-text="money(t.total)"></span>
-                                <span class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-300" x-text="'⏱ ' + duration(t.since)"></span>
-                                <span x-show="t.capacity" class="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-900 dark:text-gray-300" x-text="t.capacity + ' kursi'"></span>
+            {{-- Denah meja --}}
+            <div class="grid grid-flow-row-dense grid-cols-2 gap-x-10 gap-y-12 px-3 py-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+                <template x-for="t in visible" :key="t.id">
+                    <div class="relative flex justify-center" x-bind:class="isLong(t) && 'row-span-2'">
+                        <button type="button" x-on:click="open(t)"
+                            x-bind:title="t.occupied ? 'Lihat pesanan meja ini' : 'Buat pesanan untuk meja ini'"
+                            class="group relative w-full max-w-36 transition hover:-translate-y-0.5"
+                            x-bind:class="isLong(t) ? 'h-full min-h-72' : 'aspect-square'">
+
+                            {{-- Kursi atas & bawah --}}
+                            <span class="absolute -top-2.5 left-1/2 h-2 w-12 -translate-x-1/2 rounded-t-md"
+                                x-bind:class="t.occupied ? 'bg-orange-100 dark:bg-orange-500/20' : 'bg-success-100 dark:bg-success-500/20'"></span>
+                            <span class="absolute -bottom-2.5 left-1/2 h-2 w-12 -translate-x-1/2 rounded-b-md"
+                                x-bind:class="t.occupied ? 'bg-orange-100 dark:bg-orange-500/20' : 'bg-success-100 dark:bg-success-500/20'"></span>
+
+                            {{-- Kursi kiri & kanan (3 kursi untuk meja panjang) --}}
+                            <span class="absolute inset-y-0 -left-2.5 flex flex-col justify-around py-4">
+                                <template x-for="n in sideChairs(t)" :key="n">
+                                    <span class="h-12 w-2 rounded-l-md" x-bind:class="t.occupied ? 'bg-orange-100 dark:bg-orange-500/20' : 'bg-success-100 dark:bg-success-500/20'"></span>
+                                </template>
                             </span>
-                        </template>
-                        <span x-show="!t.occupied" class="mt-auto pt-3 text-xs font-medium text-success-600 dark:text-success-500"
-                            x-text="'Kosong' + (t.capacity ? ' · ' + t.capacity + ' kursi' : '')"></span>
-                    </button>
+                            <span class="absolute inset-y-0 -right-2.5 flex flex-col justify-around py-4">
+                                <template x-for="n in sideChairs(t)" :key="n">
+                                    <span class="h-12 w-2 rounded-r-md" x-bind:class="t.occupied ? 'bg-orange-100 dark:bg-orange-500/20' : 'bg-success-100 dark:bg-success-500/20'"></span>
+                                </template>
+                            </span>
+
+                            {{-- Meja --}}
+                            <span class="absolute inset-0 flex flex-col items-start justify-between rounded-xl p-3.5 text-start transition group-hover:shadow-theme-md"
+                                x-bind:class="t.occupied ? 'bg-orange-50 dark:bg-orange-500/15' : 'bg-success-50 dark:bg-success-500/15'">
+                                <span>
+                                    <span class="block text-lg font-semibold text-gray-800 dark:text-white/90" x-text="t.number"></span>
+                                    <span x-show="t.name" class="block text-xs text-gray-500 dark:text-gray-400" x-text="t.name"></span>
+                                </span>
+
+                                {{-- Info meja terisi --}}
+                                <template x-if="t.occupied">
+                                    <span class="flex flex-col items-start gap-1.5">
+                                        <span class="inline-flex items-center gap-1 rounded-md bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                                            <svg class="size-3.5 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                            <span x-text="money(t.total)"></span>
+                                        </span>
+                                        <span class="flex flex-wrap gap-1.5">
+                                            <span class="inline-flex items-center gap-1 rounded-md bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                                                <x-svg.time class="size-3.5" /> <span x-text="duration(t.since)"></span>
+                                            </span>
+                                            <span x-show="t.capacity" class="inline-flex items-center gap-1 rounded-md bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                                                <x-svg.user class="size-3.5" /> <span x-text="t.capacity"></span>
+                                            </span>
+                                        </span>
+                                    </span>
+                                </template>
+
+                                {{-- Info meja kosong --}}
+                                <span x-show="!t.occupied" class="text-xs font-medium text-success-600 dark:text-success-500"
+                                    x-text="'Kosong' + (t.capacity ? ' · ' + t.capacity + ' kursi' : '')"></span>
+                            </span>
+                        </button>
+                    </div>
                 </template>
             </div>
         </div>

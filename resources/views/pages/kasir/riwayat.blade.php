@@ -65,7 +65,7 @@
                             </td>
                         @endif
                         <td class="table-td">{{ $order->items_count }}</td>
-                        <td class="table-td whitespace-nowrap">{{ Format::rupiah($order->total_amount) }}</td>
+                        <td class="table-td whitespace-nowrap">{{ Format::rupiah($order->payableTotal()) }}</td>
                         <td class="table-td"><x-ui.badge size="sm" :color="$statusColor">{{ $statusLabel }}</x-ui.badge></td>
                         <td class="table-td text-end">
                             @if ($isCompleted)

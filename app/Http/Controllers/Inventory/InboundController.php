@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inbound;
 use App\Models\Item;
 use App\Models\ItemSupplier;
+use App\Models\StoreSetting;
 use App\Models\Supplier;
 use App\Services\StockService;
 use App\Support\Format;
@@ -39,6 +40,7 @@ class InboundController extends Controller
         return view('pages.inventory.inbounds.index', [
             'title' => 'Barang Masuk',
             'inbounds' => $inbounds,
+            'usesSuppliers' => StoreSetting::usesSuppliers(),
         ]);
     }
 
@@ -200,6 +202,7 @@ class InboundController extends Controller
             'lines' => array_values($lines ?: [['item_id' => '', 'quantity' => '']]),
             'catalog' => ItemCatalog::forForms(),
             'supplierOptions' => Supplier::orderBy('name')->pluck('name', 'id'),
+            'usesSuppliers' => StoreSetting::usesSuppliers(),
         ]);
     }
 
@@ -213,7 +216,8 @@ class InboundController extends Controller
     {
         $data = $request->validate([
             'date' => ['required', 'date'],
-            'supplier_id' => ['required', Rule::exists('suppliers', 'id')],
+            // Modul FNB tidak memakai supplier: harga beli diambil dari HPP barang.
+            'supplier_id' => [StoreSetting::usesSuppliers() ? 'required' : 'nullable', Rule::exists('suppliers', 'id')],
             'supplier_invoice_no' => ['nullable', 'string', 'max:50'],
             'delivery_note_no' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string'],
@@ -231,7 +235,11 @@ class InboundController extends Controller
             'items.*.quantity' => 'Kuantitas',
         ]);
 
-        $prices = ItemSupplier::where('supplier_id', $data['supplier_id'])->pluck('harga_beli', 'item_id');
+        if (! StoreSetting::usesSuppliers()) {
+            $data['supplier_id'] = null;
+        }
+
+        $prices = $data['supplier_id'] ? ItemSupplier::where('supplier_id', $data['supplier_id'])->pluck('harga_beli', 'item_id') : collect();
         $fallback = Item::whereIn('id', collect($data['items'])->pluck('item_id'))->pluck('harga_beli', 'id');
 
         $lines = collect($data['items'])->map(fn ($line) => [

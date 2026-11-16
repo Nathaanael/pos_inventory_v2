@@ -48,6 +48,7 @@ class ItemController extends Controller
             'hasBrand' => $hasBrand,
             'brandOptions' => $hasBrand ? Brand::orderBy('name')->pluck('name', 'id') : collect(),
             'supplierOptions' => Supplier::where('is_active', true)->orderBy('name')->pluck('name', 'id'),
+            'usesSuppliers' => StoreSetting::usesSuppliers(),
         ]);
     }
 
@@ -67,18 +68,22 @@ class ItemController extends Controller
 
         DB::transaction(function () use ($request, $data) {
             $item = Item::create([
+                'harga_beli' => 0,
                 ...$data['item'],
                 'code' => self::generateCode(),
-                'harga_beli' => 0,
                 'current_stock' => 0,
                 'image' => $this->hasImageFeature() ? $request->file('image')?->store('items', 'public') : null,
             ]);
 
-            foreach ($data['suppliers'] as $row) {
-                $item->itemSuppliers()->create($row);
-            }
+            // Modul dengan supplier: harga beli diambil dari supplier pertama.
+            // Modul tanpa supplier (FNB): harga beli (HPP) sudah diisi langsung di $data['item'].
+            if (StoreSetting::usesSuppliers()) {
+                foreach ($data['suppliers'] as $row) {
+                    $item->itemSuppliers()->create($row);
+                }
 
-            $item->syncAggregateFields();
+                $item->syncAggregateFields();
+            }
         });
 
         if ($request->boolean('create_another')) {
@@ -121,6 +126,11 @@ class ItemController extends Controller
             }
 
             $item->update($attributes);
+
+            // Modul tanpa supplier (FNB): data supplier lama (bila ada) dibiarkan apa adanya.
+            if (! StoreSetting::usesSuppliers()) {
+                return;
+            }
 
             // Sinkronkan baris supplier: hapus yang dibuang lebih dulu (agar supplier yang sama
             // boleh ditambahkan lagi tanpa bentrok unique index), lalu ubah yang ada & tambah yang baru.
@@ -193,6 +203,8 @@ class ItemController extends Controller
             'categoryOptions' => Category::orderBy('name')->pluck('name', 'id'),
             'unitOptions' => Unit::orderBy('name')->pluck('name', 'id'),
             'supplierOptions' => Supplier::where('is_active', true)->orderBy('name')->pluck('name', 'id'),
+            'usesSuppliers' => StoreSetting::usesSuppliers(),
+            'usesTaxes' => StoreSetting::usesTaxes(),
         ];
     }
 
@@ -208,8 +220,31 @@ class ItemController extends Controller
     {
         $hasWholesale = StoreSetting::hasFeature(Feature::WholesalePrice);
         $hasBrand = StoreSetting::hasFeature(Feature::Brand);
+        $usesSuppliers = StoreSetting::usesSuppliers();
+        $usesTaxes = StoreSetting::usesTaxes();
+
+        // Modul dengan supplier: harga beli per supplier (min. 1). Modul FNB: satu Harga Beli (HPP).
+        $supplierRules = $usesSuppliers
+            ? [
+                'suppliers' => ['required', 'array', 'min:1'],
+                'suppliers.*.id' => ['nullable', 'integer'],
+                'suppliers.*.supplier_id' => ['required', 'distinct', Rule::exists('suppliers', 'id')],
+                'suppliers.*.harga_beli' => ['required', 'numeric', 'min:0'],
+                'suppliers.*.supplier_sku' => ['nullable', 'string', 'max:255'],
+            ]
+            : ['harga_beli' => ['required', 'numeric', 'min:0']];
+
+        // Pajak per barang (opsional): kosong = ikut master Pajak & Biaya Layanan.
+        $taxRules = $usesTaxes
+            ? [
+                'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                'tax_method' => ['nullable', 'required_with:tax_rate', Rule::in(['inclusive', 'exclusive'])],
+            ]
+            : [];
 
         $validated = $request->validate([
+            ...$supplierRules,
+            ...$taxRules,
             'name' => ['required', 'string', 'max:255'],
             'barcode' => ['nullable', 'string', 'max:255', Rule::unique('items', 'barcode')->ignore($item)],
             'description' => ['nullable', 'string'],
@@ -222,11 +257,6 @@ class ItemController extends Controller
             'unit_id' => ['required', Rule::exists('units', 'id')],
             'min_stock' => ['required', 'numeric', 'min:0'],
             'rack_location' => ['nullable', 'string', 'max:255'],
-            'suppliers' => ['required', 'array', 'min:1'],
-            'suppliers.*.id' => ['nullable', 'integer'],
-            'suppliers.*.supplier_id' => ['required', 'distinct', Rule::exists('suppliers', 'id')],
-            'suppliers.*.harga_beli' => ['required', 'numeric', 'min:0'],
-            'suppliers.*.supplier_sku' => ['nullable', 'string', 'max:255'],
         ], [
             'barcode.unique' => 'barcode ini sudah ada',
             'suppliers.required' => 'Tambahkan minimal satu supplier.',
@@ -247,6 +277,9 @@ class ItemController extends Controller
             'suppliers.*.supplier_id' => 'Supplier',
             'suppliers.*.harga_beli' => 'Harga Beli',
             'suppliers.*.supplier_sku' => 'SKU Supplier',
+            'harga_beli' => 'Harga Beli (HPP)',
+            'tax_rate' => 'Persentase Pajak',
+            'tax_method' => 'Tipe Pajak',
         ]);
 
         $attributes = [
@@ -269,13 +302,21 @@ class ItemController extends Controller
         if ($hasBrand) {
             $attributes['brand_id'] = $validated['brand_id'] ?? null;
         }
+        if (! $usesSuppliers) {
+            $attributes['harga_beli'] = $validated['harga_beli'];
+        }
+        if ($usesTaxes) {
+            $hasRate = filled($validated['tax_rate'] ?? null);
+            $attributes['tax_rate'] = $hasRate ? $validated['tax_rate'] : null;
+            $attributes['tax_method'] = $hasRate ? $validated['tax_method'] : null;
+        }
 
         $suppliers = array_map(fn ($row) => [
             'id' => $row['id'] ?? null,
             'supplier_id' => $row['supplier_id'],
             'harga_beli' => $row['harga_beli'],
             'supplier_sku' => $row['supplier_sku'] ?? null,
-        ], array_values($validated['suppliers']));
+        ], array_values($validated['suppliers'] ?? []));
 
         return ['item' => $attributes, 'suppliers' => $suppliers];
     }

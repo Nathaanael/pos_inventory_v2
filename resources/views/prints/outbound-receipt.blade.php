@@ -225,9 +225,22 @@
             <td>Qty</td>
             <td class="right">{{ number_format($outbound->items->sum('quantity')) }}</td>
         </tr>
+        {{-- Pajak & biaya layanan (modul FNB) --}}
+        @if (! empty($outbound->tax_details))
+            <tr>
+                <td>Subtotal</td>
+                <td class="right">Rp{{ number_format($outbound->total_amount, 0, ',', '.') }}</td>
+            </tr>
+            @foreach ($outbound->tax_details as $tax)
+                <tr>
+                    <td>{{ $tax['name'] }} {{ (float) $tax['rate'] }}%{{ $tax['included'] ? ' (termasuk)' : '' }}</td>
+                    <td class="right">Rp{{ number_format($tax['amount'], 0, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        @endif
         <tr class="grand">
             <td>TOTAL</td>
-            <td class="right">Rp{{ number_format($outbound->total_amount, 0, ',', '.') }}</td>
+            <td class="right">Rp{{ number_format($outbound->payableTotal(), 0, ',', '.') }}</td>
         </tr>
         @if($outbound->payment_method)
         <tr>
@@ -242,7 +255,7 @@
         </tr>
         <tr>
             <td>Kembali</td>
-            <td class="right">Rp{{ number_format($outbound->paid_amount - $outbound->total_amount, 0, ',', '.') }}</td>
+            <td class="right">Rp{{ number_format($outbound->paid_amount - $outbound->payableTotal(), 0, ',', '.') }}</td>
         </tr>
         @endif
     </table>

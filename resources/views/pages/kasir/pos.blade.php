@@ -16,6 +16,7 @@
             tables: @js($tables),
             preselectTable: @js($preselectTable),
             checkoutUrl: @js(route('kasir.checkout')),
+            taxRules: @js($taxRules),
         })"
         x-on:keydown.window="shortcut($event)"
         class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_400px]">
@@ -210,8 +211,15 @@
                     @endif
                     <div class="flex justify-between text-sm text-gray-500 dark:text-gray-400">
                         <span x-text="'Subtotal (' + totalQty + ' barang)'"></span>
-                        <span x-text="money(total)"></span>
+                        <span x-text="money(subtotal)"></span>
                     </div>
+                    {{-- Pajak & biaya layanan (modul FNB). Inclusive hanya keterangan, tidak menambah total. --}}
+                    <template x-for="d in taxes.details" :key="d.name + d.rate + d.method">
+                        <div class="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                            <span x-text="d.name + ' ' + d.rate + '%' + (d.included ? ' (termasuk)' : '')"></span>
+                            <span x-bind:class="d.included && 'italic'" x-text="(d.included ? '' : '+') + money(d.amount)"></span>
+                        </div>
+                    </template>
                     <div class="flex items-center justify-between">
                         <span class="text-base font-semibold text-gray-800 dark:text-white/90">Total</span>
                         <span class="text-2xl font-bold text-gray-800 dark:text-white/90" x-text="money(total)"></span>

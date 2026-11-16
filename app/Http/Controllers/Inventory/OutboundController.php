@@ -10,6 +10,7 @@ use App\Models\Item;
 use App\Models\Outbound;
 use App\Models\StoreSetting;
 use App\Services\StockService;
+use App\Services\TaxCalculator;
 use App\Services\ThermalPrintService;
 use App\Support\Format;
 use App\Support\StatusBadge;
@@ -57,6 +58,7 @@ class OutboundController extends Controller
             'code' => Outbound::generateTransactionCode('OUT'),
             'categories' => Category::orderBy('name')->get(['id', 'name']),
             'hasWholesale' => StoreSetting::hasFeature(Feature::WholesalePrice),
+            'taxRules' => app(TaxCalculator::class)->rules(),
         ]);
     }
 
@@ -95,6 +97,8 @@ class OutboundController extends Controller
             'price_wholesale' => (float) $item->harga_jual_grosir,
             'cost_fallback' => (float) $item->harga_beli,
             'cost_layers' => $item->itemSuppliers->map(fn ($s) => ['stock' => (int) $s->current_stock, 'price' => (float) $s->harga_beli])->values(),
+            'tax_rate' => StoreSetting::usesTaxes() && $item->tax_rate !== null ? (float) $item->tax_rate : null,
+            'tax_method' => StoreSetting::usesTaxes() ? $item->tax_method : null,
         ]));
     }
 
@@ -137,6 +141,13 @@ class OutboundController extends Controller
             ];
         })->all();
 
+        // Pajak & biaya layanan (modul FNB). POS admin tidak punya tipe pesanan → hanya aturan "Semua pesanan".
+        $taxes = app(TaxCalculator::class)->calculate(collect($lines)->map(fn ($l) => [
+            'subtotal' => $l['subtotal'],
+            'tax_rate' => $items[$l['item_id']]->tax_rate,
+            'tax_method' => $items[$l['item_id']]->tax_method,
+        ])->all());
+
         try {
             $stock->createOutbound([
                 'date' => $data['date'],
@@ -144,6 +155,10 @@ class OutboundController extends Controller
                 'destination' => $data['destination'] ?? null,
                 'price_type_applied' => $priceType,
                 'notes' => $data['notes'] ?? null,
+                'service_amount' => $taxes['service_amount'],
+                'tax_amount' => $taxes['tax_amount'],
+                'grand_total' => $taxes['grand_total'],
+                'tax_details' => $taxes['details'] ?: null,
             ], $lines);
         } catch (ValidationException $e) {
             throw $e;
@@ -188,7 +203,15 @@ class OutboundController extends Controller
                 Format::rupiah($line->cogs_price),
                 Format::rupiah($line->subtotal),
             ])->all(),
-            'footer' => [['label' => 'Total', 'value' => Format::rupiah($outbound->total_amount)]],
+            'footer' => [
+                ['label' => 'Subtotal', 'value' => Format::rupiah($outbound->total_amount)],
+                // Pajak & biaya layanan (snapshot saat transaksi). Inclusive hanya keterangan.
+                ...collect($outbound->tax_details ?? [])->map(fn ($d) => [
+                    'label' => $d['name'].' '.(float) $d['rate'].'%'.($d['included'] ? ' (termasuk)' : ''),
+                    'value' => ($d['included'] ? '' : '+ ').Format::rupiah($d['amount']),
+                ])->all(),
+                ['label' => 'Total Dibayar', 'value' => Format::rupiah($outbound->payableTotal())],
+            ],
         ]);
     }
 

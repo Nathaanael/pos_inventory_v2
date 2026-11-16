@@ -90,6 +90,18 @@ class StoreSetting extends Model
         static::$featureCache = null;
     }
 
+    /** Modul aktif memakai supplier? (default ya bila jenis usaha belum dipilih) */
+    public static function usesSuppliers(): bool
+    {
+        return static::current()->business_type?->usesSuppliers() ?? true;
+    }
+
+    /** Modul aktif memakai Pajak & Biaya Layanan? */
+    public static function usesTaxes(): bool
+    {
+        return static::current()->business_type?->usesTaxes() ?? false;
+    }
+
     /**
      * Terapkan modul jenis usaha: simpan jenis usaha & aktifkan tepat fitur bawaan modulnya.
      * Dipakai wizard setup (satu-satunya tempat jenis usaha bisa diganti).
