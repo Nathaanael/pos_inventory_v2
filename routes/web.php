@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\App\ExportController;
+use App\Http\Controllers\App\NotificationController;
+use App\Http\Controllers\App\SetupController;
+use App\Http\Controllers\App\StoreSettingsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Inventory\InboundController;
@@ -7,6 +11,7 @@ use App\Http\Controllers\Inventory\OutboundController;
 use App\Http\Controllers\Inventory\ReturnTransactionController;
 use App\Http\Controllers\Inventory\StockOpnameController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\Kasir\KasirController;
 use App\Http\Controllers\Master\BrandController;
 use App\Http\Controllers\Master\CategoryController;
 use App\Http\Controllers\Master\DiningTableController;
@@ -25,7 +30,7 @@ use Illuminate\Support\Facades\Storage;
 |--------------------------------------------------------------------------
 | URL disamakan dengan panel Filament lama:
 |   Panel admin  → path ''        (/, /items, /categories, ...)
-|   Panel kasir  → path 'kasir'   (/kasir/...)   — tahap berikutnya
+|   Panel kasir  → path 'kasir'   (/kasir/pos, /kasir/meja, /kasir/riwayat)
 */
 
 // ----------------------------------------------------------------- Auth
@@ -37,6 +42,19 @@ Route::middleware('guest')->group(function () {
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
 Route::middleware(['auth', 'store.setup'])->group(function () {
+    // ------------------------------------------------------- Panel kasir (admin & kasir)
+    Route::controller(KasirController::class)->prefix('kasir')->name('kasir.')->group(function () {
+        Route::redirect('/', '/kasir/pos')->name('home');
+        Route::get('/pos', 'pos')->name('pos');
+        Route::post('/pos/checkout', 'checkout')->name('checkout');
+        Route::get('/meja', 'meja')->name('meja')->middleware('feature:meja');
+        Route::get('/meja/data', 'mejaData')->name('meja.data')->middleware('feature:meja');
+        Route::post('/meja/{table}/release', 'release')->name('meja.release')->middleware('feature:meja');
+        Route::get('/riwayat', 'riwayat')->name('riwayat');
+        Route::post('/riwayat/{outbound}/print-thermal', 'printThermal')->name('print-thermal');
+        Route::get('/belum-siap', 'notReady')->name('belum-siap');
+    });
+
     // ------------------------------------------------------- Panel admin
     Route::middleware('admin')->group(function () {
         Route::get('/', DashboardController::class)->name('dashboard');
@@ -145,6 +163,19 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
         });
 
         // Aplikasi
+        Route::get('/setup', [SetupController::class, 'show'])->name('setup');
+        Route::post('/setup', [SetupController::class, 'store'])->name('setup.store');
+
+        Route::get('/pengaturan-toko', [StoreSettingsController::class, 'edit'])->name('store-settings.edit');
+        Route::put('/pengaturan-toko', [StoreSettingsController::class, 'update'])->name('store-settings.update');
+
+        Route::get('/export-data', [ExportController::class, 'index'])->name('export-data.index');
+        Route::post('/export-data', [ExportController::class, 'store'])->name('export-data.store');
+        Route::delete('/export-data/files/{filename}', [ExportController::class, 'destroy'])->name('export-data.destroy');
+
+        Route::post('/notifications/read', [NotificationController::class, 'markAllRead'])->name('notifications.read');
+        Route::delete('/notifications', [NotificationController::class, 'clear'])->name('notifications.clear');
+
         Route::controller(UserController::class)->prefix('users')->name('users.')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');

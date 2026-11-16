@@ -1,68 +1,96 @@
+{{--
+    Notifikasi lonceng (pengganti databaseNotifications() Filament): 15 notifikasi terakhir milik user.
+    Mendukung format notifikasi baru (App\Notifications\AppNotification) maupun format Filament lama yang masih tersimpan.
+--}}
 @php
-    $notifications = [
-        ['id' => '1', 'name' => 'Terry Franci', 'avatar' => '/assets/images/user/user-02.jpg', 'timeKey' => 'minAgo', 'timeCount' => 5, 'status' => 'online'],
-        ['id' => '2', 'name' => 'Alena Franci', 'avatar' => '/assets/images/user/user-03.jpg', 'timeKey' => 'minAgo', 'timeCount' => 8, 'status' => 'online'],
-        ['id' => '3', 'name' => 'Jocelyn Kenter', 'avatar' => '/assets/images/user/user-04.jpg', 'timeKey' => 'minAgo', 'timeCount' => 15, 'status' => 'online'],
-        ['id' => '4', 'name' => 'Brandon Philips', 'avatar' => '/assets/images/user/user-05.jpg', 'timeKey' => 'hrAgo', 'timeCount' => 1, 'status' => 'offline'],
-        ['id' => '5', 'name' => 'Terry Franci', 'avatar' => '/assets/images/user/user-02.jpg', 'timeKey' => 'minAgo', 'timeCount' => 5, 'status' => 'online'],
-        ['id' => '6', 'name' => 'Alena Franci', 'avatar' => '/assets/images/user/user-03.jpg', 'timeKey' => 'minAgo', 'timeCount' => 8, 'status' => 'online'],
-        ['id' => '7', 'name' => 'Jocelyn Kenter', 'avatar' => '/assets/images/user/user-04.jpg', 'timeKey' => 'minAgo', 'timeCount' => 15, 'status' => 'online'],
-        ['id' => '8', 'name' => 'Brandon Philips', 'avatar' => '/assets/images/user/user-05.jpg', 'timeKey' => 'hrAgo', 'timeCount' => 1, 'status' => 'offline'],
+    $user = auth()->user();
+    $notifications = $user?->notifications()->latest()->limit(15)->get() ?? collect();
+    $unread = $user?->unreadNotifications()->count() ?? 0;
+
+    $normalize = function ($notification) {
+        $data = $notification->data;
+        $url = $data['url'] ?? ($data['actions'][0]['url'] ?? null);
+        $type = $data['type'] ?? match ($data['iconColor'] ?? $data['status'] ?? null) {
+            'success' => 'success',
+            'danger' => 'error',
+            'warning' => 'warning',
+            default => 'info',
+        };
+
+        return [
+            'title' => $data['title'] ?? 'Notifikasi',
+            'body' => $data['body'] ?? null,
+            'url' => $url,
+            'url_label' => $data['url_label'] ?? ($data['actions'][0]['label'] ?? 'Buka'),
+            'type' => $type,
+            'unread' => $notification->read_at === null,
+            'time' => $notification->created_at?->locale('id')->diffForHumans(),
+        ];
+    };
+    $tones = [
+        'success' => 'bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-500',
+        'error' => 'bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-500',
+        'warning' => 'bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-orange-400',
+        'info' => 'bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400',
     ];
-    $initials = fn (string $name) => strtoupper(collect(explode(' ', $name))->map(fn ($n) => mb_substr($n, 0, 1))->take(2)->implode(''));
 @endphp
 
-<div class="contents" x-data="{ notifying: true }">
-    <x-ui.dropdown-menu>
-        <x-ui.dropdown-menu.trigger as-child>
-            <x-ui.button variant="outline" size="icon-lg" class="relative" aria-label="Toggle notifications" x-on:click.capture="notifying = false">
-                <span x-bind:class="notifying ? 'flex' : 'hidden'" class="absolute end-0 -top-0.5 z-10 h-2 w-2 translate-x-1/2 rounded-full bg-orange-400 rtl:-translate-x-1/2">
-                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75"></span>
+<x-ui.dropdown-menu>
+    <x-ui.dropdown-menu.trigger as-child>
+        <x-ui.button variant="outline" size="icon-lg" class="relative" aria-label="Notifikasi">
+            @if ($unread > 0)
+                <span class="absolute -top-1 end-0 z-10 flex min-w-5 translate-x-1/3 items-center justify-center rounded-full bg-orange-400 px-1 text-[10px] font-semibold text-white rtl:-translate-x-1/3">
+                    {{ $unread > 9 ? '9+' : $unread }}
                 </span>
-                <x-svg.bell class="size-auto!" />
-            </x-ui.button>
-        </x-ui.dropdown-menu.trigger>
+            @endif
+            <x-svg.bell class="size-auto!" />
+        </x-ui.button>
+    </x-ui.dropdown-menu.trigger>
 
-        <x-ui.dropdown-menu.content align="end" :side-offset="12" class="w-87.5 overflow-hidden p-3 sm:w-90.25 dark:bg-[#1E2635]">
-            <div class="flex items-center justify-between pb-3">
-                <h5 class="text-lg font-semibold text-gray-800 dark:text-gray-200">{{ __('header.notifications.title') }}</h5>
-                <x-ui.button variant="ghost" size="icon-xs" aria-label="Close notifications" x-on:click="close()">
-                    <x-svg.x class="size-5" />
-                </x-ui.button>
-            </div>
+    <x-ui.dropdown-menu.content align="end" :side-offset="12" class="w-87.5 overflow-hidden p-3 sm:w-90.25">
+        <div class="flex items-center justify-between pb-3">
+            <h5 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Notifikasi</h5>
+            @if ($unread > 0)
+                <form method="POST" action="{{ route('notifications.read') }}">
+                    @csrf
+                    <button type="submit" class="text-xs font-medium text-brand-500 hover:underline">Tandai semua dibaca</button>
+                </form>
+            @endif
+        </div>
 
-            <x-ui.dropdown-menu.separator class="my-0" />
+        <x-ui.dropdown-menu.separator class="my-0" />
 
-            <div class="h-96 overflow-y-auto overflow-x-hidden custom-scrollbar">
-                <div class="flex flex-col pe-2">
-                    @foreach ($notifications as $item)
-                        <x-ui.dropdown-menu.item class="flex items-start gap-3 rounded-lg p-3 hover:bg-gray-100 dark:hover:bg-white/5">
-                            <x-ui.avatar size="default">
-                                <x-ui.avatar.image :src="$item['avatar']" :alt="$item['name']" />
-                                <x-ui.avatar.fallback>{{ $initials($item['name']) }}</x-ui.avatar.fallback>
-                                <x-ui.avatar.badge :variant="$item['status']" />
-                            </x-ui.avatar>
-                            <span class="block flex-1 text-start">
-                                <span class="mb-1.5 block space-x-1 text-sm text-gray-500 dark:text-gray-400">
-                                    <span class="font-medium text-gray-800 dark:text-white/90">{{ $item['name'] }}</span>
-                                    <span>{{ __('header.notifications.requestsPermission') }}</span>
-                                    <span class="font-medium text-gray-800 dark:text-white/90">Project - Nganter App</span>
-                                </span>
-                                <span class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                    <span>{{ __('header.notifications.project') }}</span>
-                                    <x-svg.dot class="size-2 text-gray-400 dark:text-gray-500" />
-                                    <span>{{ str_replace('{count}', $item['timeCount'], __('header.notifications.' . $item['timeKey'])) }}</span>
-                                </span>
-                            </span>
-                        </x-ui.dropdown-menu.item>
-                        <x-ui.dropdown-menu.separator class="my-0.5 bg-gray-100 last-of-type:hidden dark:bg-gray-700" />
-                    @endforeach
+        <div class="custom-scrollbar max-h-96 overflow-x-hidden overflow-y-auto">
+            @forelse ($notifications->map($normalize) as $item)
+                <div class="flex items-start gap-3 rounded-lg p-3 {{ $item['unread'] ? 'bg-gray-50 dark:bg-white/3' : '' }}">
+                    <span class="flex size-9 shrink-0 items-center justify-center rounded-full {{ $tones[$item['type']] ?? $tones['info'] }}">
+                        <x-svg.bell class="size-4" />
+                    </span>
+                    <span class="block min-w-0 flex-1 text-start">
+                        <span class="block text-sm font-medium text-gray-800 dark:text-white/90">{{ $item['title'] }}</span>
+                        @if ($item['body'])
+                            <span class="mt-0.5 block text-sm text-gray-500 dark:text-gray-400">{{ $item['body'] }}</span>
+                        @endif
+                        <span class="mt-1.5 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{{ $item['time'] }}</span>
+                            @if ($item['url'])
+                                <a href="{{ $item['url'] }}" target="_blank" class="font-medium text-brand-500 hover:underline">{{ $item['url_label'] }}</a>
+                            @endif
+                        </span>
+                    </span>
                 </div>
-            </div>
+            @empty
+                <p class="px-3 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Belum ada notifikasi.</p>
+            @endforelse
+        </div>
 
-            <x-ui.button as="a" href="/" variant="outline" size="default" class="mt-3 w-full" x-on:click="close()">
-                {{ __('header.notifications.viewAll') }}
-            </x-ui.button>
-        </x-ui.dropdown-menu.content>
-    </x-ui.dropdown-menu>
-</div>
+        @if ($notifications->isNotEmpty())
+            <x-ui.dropdown-menu.separator class="my-0" />
+            <form method="POST" action="{{ route('notifications.clear') }}" class="pt-2">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="w-full rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5">Hapus semua notifikasi</button>
+            </form>
+        @endif
+    </x-ui.dropdown-menu.content>
+</x-ui.dropdown-menu>

@@ -30,8 +30,8 @@ class EnsureStoreIsSetUp
 
         $target = $user->isKasir() ? 'kasir.belum-siap' : 'setup';
 
-        // Halaman tujuan belum dibuat (tahap konversi berikutnya): jangan blokir.
-        if (! Route::has($target) || $request->routeIs($target)) {
+        // Halaman tujuan (dan pengirim form-nya, mis. setup.store) tetap boleh dibuka.
+        if (! Route::has($target) || $request->routeIs($target, $target.'.*')) {
             return $next($request);
         }
 

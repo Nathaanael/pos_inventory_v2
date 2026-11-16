@@ -45,6 +45,7 @@
                     <x-svg.moon x-show="$store.theme.resolvedTheme !== 'dark'" />
                 </x-ui.button>
 
+                <x-header.notification-dropdown />
             </div>
             <x-header.user-dropdown />
         </div>

@@ -9,8 +9,7 @@ use App\Exports\ProfitLossExport;
 use App\Exports\StockMovementExport;
 use App\Exports\StockOpnameExport;
 use App\Models\User;
-use Filament\Actions\Action;
-use Filament\Notifications\Notification;
+use App\Notifications\AppNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Queue\Queueable;
@@ -46,24 +45,15 @@ class ExportDataJob implements ShouldQueue
             // Generate the Excel file
             Excel::store($exportClass, "{$directory}/{$filename}", 'local');
 
-            // Send success notification to user
-            $user = User::find($this->userId);
-            if ($user) {
-                Notification::make()
-                    ->title('Export Selesai! 🎉')
-                    ->body("File {$this->getExportLabel()} berhasil dibuat dan siap didownload.")
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->iconColor('success')
-                    ->actions([
-                        Action::make('download')
-                            ->label('Download File')
-                            ->icon('heroicon-o-arrow-down-tray')
-                            ->url(route('export.download', ['filename' => $filename]), shouldOpenInNewTab: true)
-                            ->color('success')
-                            ->button(),
-                    ])
-                    ->sendToDatabase($user);
-            }
+            // Beri tahu user lewat notifikasi lonceng di header.
+            User::find($this->userId)?->notify(new AppNotification(
+                title: 'Export Selesai! 🎉',
+                body: "File {$this->getExportLabel()} berhasil dibuat dan siap didownload.",
+                type: 'success',
+                // URL relatif: tetap benar walau job dijalankan worker antrean (tanpa request/host).
+                url: route('export.download', ['filename' => $filename], false),
+                urlLabel: 'Download File',
+            ));
 
             Log::info("Export completed: {$filename} for user #{$this->userId}");
         } catch (\Throwable $e) {
@@ -73,16 +63,11 @@ class ExportDataJob implements ShouldQueue
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            // Send failure notification
-            $user = User::find($this->userId);
-            if ($user) {
-                Notification::make()
-                    ->title('Export Gagal ❌')
-                    ->body("Terjadi kesalahan saat membuat file {$this->getExportLabel()}. Silakan coba lagi.")
-                    ->icon('heroicon-o-exclamation-triangle')
-                    ->iconColor('danger')
-                    ->sendToDatabase($user);
-            }
+            User::find($this->userId)?->notify(new AppNotification(
+                title: 'Export Gagal ❌',
+                body: "Terjadi kesalahan saat membuat file {$this->getExportLabel()}. Silakan coba lagi.",
+                type: 'error',
+            ));
 
             throw $e;
         }

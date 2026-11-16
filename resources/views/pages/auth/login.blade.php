@@ -57,10 +57,12 @@
                 <div class="z-1 flex items-center justify-center">
                     <x-common.common-grid-shape />
                     <div class="flex max-w-xs flex-col items-center">
+                        {{-- Ada logo: tampilkan logo saja; tanpa logo: nama toko. --}}
                         @if ($store->logoUrl())
-                            <img src="{{ $store->logoUrl() }}" alt="{{ $storeName }}" class="mb-4 h-20 w-20 rounded-2xl bg-white object-contain p-2" />
+                            <img src="{{ $store->logoUrl() }}" alt="{{ $storeName }}" class="mb-4 max-h-28 w-auto max-w-60 rounded-2xl bg-white object-contain p-3" />
+                        @else
+                            <h2 class="mb-2 text-center text-2xl font-semibold text-white">{{ $storeName }}</h2>
                         @endif
-                        <h2 class="mb-2 text-center text-2xl font-semibold text-white">{{ $storeName }}</h2>
                         <p class="text-center text-gray-400 dark:text-white/60">Aplikasi kasir & manajemen inventaris</p>
                     </div>
                 </div>
