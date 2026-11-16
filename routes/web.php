@@ -1,92 +1,127 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ItemController;
+use App\Http\Controllers\Master\BrandController;
+use App\Http\Controllers\Master\CategoryController;
+use App\Http\Controllers\Master\DiningTableController;
+use App\Http\Controllers\Master\SupplierController;
+use App\Http\Controllers\Master\UnitController;
+use App\Http\Controllers\Master\UserController;
+use App\Http\Controllers\OutboundPrintController;
+use App\Http\Controllers\ReturnTransactionPdfController;
+use App\Http\Controllers\StockOpnamePdfController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
-// dashboard pages
-Route::get('/', function () {
-    return redirect()->route('ecommerce');
-})->name('dashboard');
+/*
+|--------------------------------------------------------------------------
+| Rute hasil konversi dari Filament (stock-opname-filament)
+|--------------------------------------------------------------------------
+| URL disamakan dengan panel Filament lama:
+|   Panel admin  → path ''        (/, /items, /categories, ...)
+|   Panel kasir  → path 'kasir'   (/kasir/...)   — tahap berikutnya
+|   Panel portal → path 'portal'  (/portal)
+*/
 
-Route::get('/ecommerce', function () {
-    return view('pages.dashboard.ecommerce', ['title' => 'E-commerce Dashboard']);
-})->name('ecommerce');
+// ----------------------------------------------------------------- Auth
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [LoginController::class, 'create'])->name('login');
+    Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+});
 
-// calendar pages
-Route::get('/calendar', function () {
-    return view('pages.calendar', ['title' => 'Calendar']);
-})->name('calendar');
+Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
-// profile pages
-Route::get('/profile', function () {
-    return view('pages.profile', ['title' => 'Profile']);
-})->name('profile');
+Route::middleware(['auth', 'store.setup'])->group(function () {
+    // ------------------------------------------------------------- Portal
+    Route::view('/portal', 'pages.portal', ['title' => 'Portal'])->middleware('admin')->name('portal');
 
-// form pages
-Route::get('/form-elements', function () {
-    return view('pages.forms.form-elements', ['title' => 'Form Elements']);
-})->name('form-elements');
+    // ------------------------------------------------------- Panel admin
+    Route::middleware('admin')->group(function () {
+        Route::get('/', DashboardController::class)->name('dashboard');
 
-// tables pages
-Route::get('/basic-tables', function () {
-    return view('pages.tables.basic-tables', ['title' => 'Basic Tables']);
-})->name('basic-tables');
+        // Manajemen Data
+        Route::controller(CategoryController::class)->prefix('categories')->name('categories.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::put('/{category}', 'update')->name('update')->withTrashed();
+            Route::delete('/{category}', 'destroy')->name('destroy');
+            Route::post('/{category}/restore', 'restore')->name('restore')->withTrashed();
+            Route::delete('/{category}/force', 'forceDelete')->name('force-delete')->withTrashed();
+        });
 
-// pages
-Route::get('/blank', function () {
-    return view('pages.pages.blank', ['title' => 'Blank']);
-})->name('blank');
+        Route::controller(UnitController::class)->prefix('units')->name('units.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::put('/{unit}', 'update')->name('update')->withTrashed();
+            Route::delete('/{unit}', 'destroy')->name('destroy');
+            Route::post('/{unit}/restore', 'restore')->name('restore')->withTrashed();
+            Route::delete('/{unit}/force', 'forceDelete')->name('force-delete')->withTrashed();
+        });
 
-// error pages
-Route::get('/error-404', function () {
-    return view('pages.errors.error-404', ['title' => 'Error 404']);
-})->name('error-404');
+        Route::controller(SupplierController::class)->prefix('suppliers')->name('suppliers.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::put('/{supplier}', 'update')->name('update');
+            Route::delete('/{supplier}', 'destroy')->name('destroy');
+        });
 
-// chart pages
-Route::get('/line-chart', function () {
-    return view('pages.chart.line-chart', ['title' => 'Line Chart']);
-})->name('line-chart');
+        Route::controller(BrandController::class)->prefix('brands')->name('brands.')->middleware('feature:merek')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::put('/{brand}', 'update')->name('update');
+            Route::delete('/{brand}', 'destroy')->name('destroy');
+        });
 
-Route::get('/bar-chart', function () {
-    return view('pages.chart.bar-chart', ['title' => 'Bar Chart']);
-})->name('bar-chart');
+        Route::controller(DiningTableController::class)->prefix('meja')->name('meja.')->middleware('feature:meja')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('/{meja}', 'update')->name('update');
+            Route::patch('/{meja}/toggle', 'toggle')->name('toggle');
+            Route::delete('/{meja}', 'destroy')->name('destroy');
+        });
 
-// authentication pages
-Route::get('/signin', function () {
-    return view('pages.auth.signin', ['title' => 'Sign In']);
-})->name('signin');
+        // Inventaris
+        Route::controller(ItemController::class)->prefix('items')->name('items.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::post('/', 'store')->name('store');
+            Route::get('/{item}/edit', 'edit')->name('edit')->withTrashed();
+            Route::put('/{item}', 'update')->name('update')->withTrashed();
+            Route::get('/{item}/history', 'history')->name('history')->withTrashed();
+            Route::get('/{item}/detail', 'show')->name('show')->withTrashed();
+        });
 
-Route::get('/signup', function () {
-    return view('pages.auth.signup', ['title' => 'Sign Up']);
-})->name('signup');
+        // Aplikasi
+        Route::controller(UserController::class)->prefix('users')->name('users.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('/{user}', 'update')->name('update');
+            Route::delete('/{user}', 'destroy')->name('destroy');
+        });
 
-Route::post('/logout', function () {
-    return redirect()->route('signin');
-})->name('logout');
+        // Dokumen (sama seperti versi lama)
+        Route::get('/stock-opname/{stockOpname}/pdf', [StockOpnamePdfController::class, 'download'])->name('stock-opname.pdf');
+        Route::get('/return-transaction/{returnTransaction}/pdf', [ReturnTransactionPdfController::class, 'download'])->name('return-transaction.pdf');
 
-// ui elements pages
-Route::get('/alerts', function () {
-    return view('pages.ui-elements.alerts', ['title' => 'Alerts']);
-})->name('alerts');
+        Route::get('/exports/download/{filename}', function (string $filename) {
+            // Sanitize filename to prevent directory traversal
+            $filename = basename($filename);
+            $path = "exports/{$filename}";
 
-Route::get('/avatars', function () {
-    return view('pages.ui-elements.avatars', ['title' => 'Avatars']);
-})->name('avatars');
+            abort_unless(Storage::disk('local')->exists($path), 404, 'File tidak ditemukan.');
 
-Route::get('/badge', function () {
-    return view('pages.ui-elements.badge', ['title' => 'Badges']);
-})->name('badge');
+            return Storage::disk('local')->download($path, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]);
+        })->name('export.download');
+    });
 
-Route::get('/buttons', function () {
-    return view('pages.ui-elements.buttons', ['title' => 'Buttons']);
-})->name('buttons');
-
-Route::get('/images', function () {
-    return view('pages.ui-elements.images', ['title' => 'Images']);
-})->name('images');
-
-Route::get('/videos', function () {
-    return view('pages.ui-elements.videos', ['title' => 'Videos']);
-})->name('videos');
-
-// legacy URLs
-Route::redirect('/badges', '/badge');
+    // Struk bisa dicetak admin maupun kasir.
+    Route::get('/outbound/{outbound}/print', [OutboundPrintController::class, 'print'])->name('outbound.print');
+});

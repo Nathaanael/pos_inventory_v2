@@ -4,6 +4,8 @@ import flatpickr from "flatpickr";
 import "flatpickr/dist/flatpickr.min.css";
 import "./bootstrap";
 import initCharts from "./components/chart";
+import crudPage from "./components/crud/crud-page";
+import moneyInput from "./components/crud/money-input";
 import registerUi from "./ui";
 
 window.Alpine = Alpine;
@@ -55,6 +57,10 @@ Alpine.data("dropdown", () => ({
 }));
 
 registerUi(Alpine);
+
+// Halaman CRUD hasil konversi dari Filament
+Alpine.data("crudPage", crudPage);
+Alpine.data("moneyInput", moneyInput);
 
 // Free ships English only: choosing a language only switches the layout direction (RTL for Arabic).
 Alpine.store("direction", {

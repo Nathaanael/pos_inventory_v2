@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsureStoreIsSetUp;
+use App\Http\Middleware\RedirectKasirToPortal;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +15,16 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+
+        $middleware->alias([
+            'admin' => RedirectKasirToPortal::class,
+            'store.setup' => EnsureStoreIsSetUp::class,
+            'feature' => EnsureFeatureEnabled::class,
+        ]);
+
+        // Satu halaman login untuk semua role; setelah login diarahkan sesuai role.
+        $middleware->redirectGuestsTo('/login');
+        $middleware->redirectUsersTo(fn ($request) => $request->user()?->homeUrl() ?? '/');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

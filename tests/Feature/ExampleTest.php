@@ -1,7 +1,10 @@
 <?php
 
-test('the application returns a successful response', function () {
-    $response = $this->get('/ecommerce');
+test('guests are redirected to the login page', function () {
+    $this->get('/')->assertRedirect('/login');
+    $this->get('/items')->assertRedirect('/login');
+});
 
-    $response->assertStatus(200);
+test('the login page is reachable', function () {
+    $this->get('/login')->assertOk()->assertSee('Masuk');
 });

@@ -1,0 +1,1 @@
+<?php namespace App\Models; use Illuminate\Database\Eloquent\Model; class ItemPrice extends Model { protected $guarded = []; public function item() { return $this->belongsTo(Item::class); } public function changedBy() { return $this->belongsTo(User::class, 'changed_by'); } }

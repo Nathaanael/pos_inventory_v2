@@ -13,10 +13,17 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+            $table->string('nik', 20)->unique()->nullable(); // I make it nullable to not break default filament user creation right away if it doesn't provide nik
+            $table->string('name', 100);
             $table->string('email')->unique();
+            $table->string('role')->default('admin');
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->boolean('must_reset_password')->default(true);
+            $table->string('phone', 20)->nullable();
+            $table->string('avatar')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamp('last_login_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

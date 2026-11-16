@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr" class="h-full bg-gray-50 dark:bg-gray-900">
+<html lang="id" dir="ltr" class="h-full bg-gray-50 dark:bg-gray-900">
 
 <head>
     <script>
@@ -156,6 +156,8 @@
 
     </div>
 
+    <x-common.flash />
+    <x-common.confirm-dialog />
 </body>
 
 @stack('scripts')
