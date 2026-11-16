@@ -7,8 +7,9 @@
           action: '/categories/5',         // URL form
           method: 'DELETE',                // DELETE | POST | PUT | PATCH
           confirmLabel: 'Hapus',
-          variant: 'destructive',          // atau 'default'
+          variant: 'destructive',          // 'destructive' | 'success' | 'default'
           fields: [['ids[]', 1], ['ids[]', 2]],  // input tersembunyi tambahan (opsional)
+          reason: { name: 'void_reason', label: 'Alasan Pembatalan' },  // isian teks wajib (opsional)
       })
 --}}
 <div x-data="{
@@ -20,6 +21,8 @@
         confirmLabel: 'Hapus',
         variant: 'destructive',
         fields: [],
+        reason: null,
+        reasonText: '',
         show(detail) {
             Object.assign(this, {
                 title: 'Konfirmasi',
@@ -28,33 +31,53 @@
                 confirmLabel: 'Hapus',
                 variant: 'destructive',
                 fields: [],
+                reason: null,
+                reasonText: '',
             }, detail);
             this.open = true;
+        },
+        get tone() {
+            return {
+                destructive: { icon: 'bg-error-50 text-error-500 dark:bg-error-500/15', button: 'bg-error-500 hover:bg-error-600' },
+                success: { icon: 'bg-success-50 text-success-500 dark:bg-success-500/15', button: 'bg-success-500 hover:bg-success-600' },
+                default: { icon: 'bg-brand-50 text-brand-500 dark:bg-brand-500/15', button: 'bg-brand-500 hover:bg-brand-600' },
+            }[this.variant] ?? { icon: 'bg-brand-50 text-brand-500 dark:bg-brand-500/15', button: 'bg-brand-500 hover:bg-brand-600' };
         },
     }"
     x-on:confirm.window="show($event.detail)">
     <x-common.modal show="open" max-width="md">
         <div class="flex flex-col items-center text-center">
-            <span class="mb-5 flex size-14 items-center justify-center rounded-full"
-                x-bind:class="variant === 'destructive' ? 'bg-error-50 text-error-500 dark:bg-error-500/15' : 'bg-brand-50 text-brand-500 dark:bg-brand-500/15'">
+            <span class="mb-5 flex size-14 items-center justify-center rounded-full" x-bind:class="tone.icon">
                 <x-svg.octagon-alert class="size-7" x-show="variant === 'destructive'" />
-                <x-svg.info-circle class="size-7" x-show="variant !== 'destructive'" />
+                <x-svg.check-circle class="size-7" x-show="variant === 'success'" />
+                <x-svg.info-circle class="size-7" x-show="variant === 'default'" />
             </span>
             <h3 class="text-xl font-semibold text-gray-800 dark:text-white/90" x-text="title"></h3>
             <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" x-text="message"></p>
         </div>
 
-        <form method="POST" x-bind:action="action" class="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+        <form method="POST" x-bind:action="action" class="mt-6">
             @csrf
             <input type="hidden" name="_method" x-bind:value="method">
             <template x-for="([name, value], index) in fields" :key="index">
                 <input type="hidden" x-bind:name="name" x-bind:value="value">
             </template>
 
-            <x-ui.button variant="outline" x-on:click="open = false" class="sm:min-w-32">Batal</x-ui.button>
-            <button type="submit" x-text="confirmLabel"
-                class="inline-flex h-10 items-center justify-center rounded-[10px] px-4 text-sm font-medium text-white shadow-theme-xs transition-colors sm:min-w-32"
-                x-bind:class="variant === 'destructive' ? 'bg-error-500 hover:bg-error-600' : 'bg-brand-500 hover:bg-brand-600'"></button>
+            <template x-if="reason">
+                <div class="mb-6 flex flex-col gap-1.5 text-start">
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-400">
+                        <span x-text="reason.label"></span><span class="text-error-500">*</span>
+                    </label>
+                    <x-ui.textarea x-bind:name="reason.name" x-model="reasonText" rows="3" required />
+                </div>
+            </template>
+
+            <div class="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+                <x-ui.button variant="outline" x-on:click="open = false" class="sm:min-w-32">Batal</x-ui.button>
+                <button type="submit" x-text="confirmLabel" x-bind:disabled="reason && ! reasonText.trim()"
+                    class="inline-flex h-10 items-center justify-center rounded-[10px] px-4 text-sm font-medium text-white shadow-theme-xs transition-colors disabled:opacity-50 sm:min-w-32"
+                    x-bind:class="tone.button"></button>
+            </div>
         </form>
     </x-common.modal>
 </div>

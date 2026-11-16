@@ -2,6 +2,10 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Inventory\InboundController;
+use App\Http\Controllers\Inventory\OutboundController;
+use App\Http\Controllers\Inventory\ReturnTransactionController;
+use App\Http\Controllers\Inventory\StockOpnameController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\Master\BrandController;
 use App\Http\Controllers\Master\CategoryController;
@@ -22,7 +26,6 @@ use Illuminate\Support\Facades\Storage;
 | URL disamakan dengan panel Filament lama:
 |   Panel admin  → path ''        (/, /items, /categories, ...)
 |   Panel kasir  → path 'kasir'   (/kasir/...)   — tahap berikutnya
-|   Panel portal → path 'portal'  (/portal)
 */
 
 // ----------------------------------------------------------------- Auth
@@ -34,9 +37,6 @@ Route::middleware('guest')->group(function () {
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
 Route::middleware(['auth', 'store.setup'])->group(function () {
-    // ------------------------------------------------------------- Portal
-    Route::view('/portal', 'pages.portal', ['title' => 'Portal'])->middleware('admin')->name('portal');
-
     // ------------------------------------------------------- Panel admin
     Route::middleware('admin')->group(function () {
         Route::get('/', DashboardController::class)->name('dashboard');
@@ -95,6 +95,53 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::put('/{item}', 'update')->name('update')->withTrashed();
             Route::get('/{item}/history', 'history')->name('history')->withTrashed();
             Route::get('/{item}/detail', 'show')->name('show')->withTrashed();
+        });
+
+        Route::controller(InboundController::class)->prefix('inbounds')->name('inbounds.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::post('/', 'store')->name('store');
+            Route::post('/bulk-approve', 'bulkApprove')->name('bulk-approve');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::get('/{inbound}/edit', 'edit')->name('edit');
+            Route::put('/{inbound}', 'update')->name('update');
+            Route::get('/{inbound}/detail', 'show')->name('show');
+            Route::post('/{inbound}/approve', 'approve')->name('approve');
+            Route::post('/{inbound}/void', 'void')->name('void');
+        });
+
+        Route::controller(OutboundController::class)->prefix('outbounds')->name('outbounds.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::get('/pos-items', 'posItems')->name('pos-items');
+            Route::post('/', 'store')->name('store');
+            Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
+            Route::get('/{outbound}/detail', 'show')->name('show');
+            Route::post('/{outbound}/print-thermal', 'printThermal')->name('print-thermal');
+            Route::post('/{outbound}/void', 'void')->name('void');
+        });
+
+        Route::controller(StockOpnameController::class)->prefix('stock-opnames')->name('stock-opnames.')->middleware('feature:stock_opname')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::post('/', 'store')->name('store');
+            Route::get('/{stockOpname}/edit', 'edit')->name('edit');
+            Route::put('/{stockOpname}', 'update')->name('update');
+            Route::get('/{stockOpname}/detail', 'show')->name('show');
+        });
+
+        Route::controller(ReturnTransactionController::class)->prefix('return-transactions')->name('return-transactions.')->middleware('feature:retur')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::post('/', 'store')->name('store');
+            Route::post('/bulk-approve', 'bulkApprove')->name('bulk-approve');
+            Route::post('/bulk-reject', 'bulkReject')->name('bulk-reject');
+            Route::get('/{returnTransaction}/edit', 'edit')->name('edit');
+            Route::put('/{returnTransaction}', 'update')->name('update');
+            Route::delete('/{returnTransaction}', 'destroy')->name('destroy');
+            Route::get('/{returnTransaction}/detail', 'show')->name('show');
+            Route::post('/{returnTransaction}/approve', 'approve')->name('approve');
+            Route::post('/{returnTransaction}/reject', 'reject')->name('reject');
         });
 
         // Aplikasi

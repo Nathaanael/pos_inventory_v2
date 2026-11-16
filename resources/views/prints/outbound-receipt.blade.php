@@ -232,7 +232,7 @@
         @if($outbound->payment_method)
         <tr>
             <td>Bayar</td>
-            <td class="right">{{ \App\Filament\Kasir\Pages\Pos::PAYMENT_METHODS[$outbound->payment_method] ?? ucfirst($outbound->payment_method) }}</td>
+            <td class="right">{{ \App\Models\Outbound::PAYMENT_METHODS[$outbound->payment_method] ?? ucfirst($outbound->payment_method) }}</td>
         </tr>
         @endif
         @if($outbound->payment_method === 'tunai' && $outbound->paid_amount)

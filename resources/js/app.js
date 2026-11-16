@@ -5,7 +5,13 @@ import "flatpickr/dist/flatpickr.min.css";
 import "./bootstrap";
 import initCharts from "./components/chart";
 import crudPage from "./components/crud/crud-page";
+import listPage from "./components/crud/list-page";
 import moneyInput from "./components/crud/money-input";
+import searchSelect from "./components/crud/search-select";
+import inboundForm from "./components/inventory/inbound-form";
+import opnameForm from "./components/inventory/opname-form";
+import posCart from "./components/inventory/pos-cart";
+import returnForm from "./components/inventory/return-form";
 import registerUi from "./ui";
 
 window.Alpine = Alpine;
@@ -60,7 +66,13 @@ registerUi(Alpine);
 
 // Halaman CRUD hasil konversi dari Filament
 Alpine.data("crudPage", crudPage);
+Alpine.data("listPage", listPage);
 Alpine.data("moneyInput", moneyInput);
+Alpine.data("searchSelect", searchSelect);
+Alpine.data("inboundForm", inboundForm);
+Alpine.data("returnForm", returnForm);
+Alpine.data("opnameForm", opnameForm);
+Alpine.data("posCart", posCart);
 
 // Free ships English only: choosing a language only switches the layout direction (RTL for Arabic).
 Alpine.store("direction", {

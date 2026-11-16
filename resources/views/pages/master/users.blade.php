@@ -93,7 +93,7 @@
                 <x-common.form.field label="Role" for="user-role" error="role" required>
                     <x-common.form.select id="user-role" name="role" x-model="form.role" :options="User::ROLES" x-bind:disabled="form.is_self" required />
                     <p class="text-xs text-gray-500 dark:text-gray-400"
-                        x-text="form.is_self ? 'Anda tidak bisa mengubah role akun sendiri.' : 'Kasir hanya bisa membuka portal kasir (/kasir).'"></p>
+                        x-text="form.is_self ? 'Anda tidak bisa mengubah role akun sendiri.' : 'Kasir hanya bisa membuka halaman kasir (/kasir).'"></p>
                 </x-common.form.field>
 
                 <x-common.form.field label="No. HP" for="user-phone" error="phone">

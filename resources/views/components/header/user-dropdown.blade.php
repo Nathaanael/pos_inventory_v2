@@ -22,14 +22,6 @@
             </x-ui.badge>
         </div>
 
-        @if ($user?->isAdmin())
-            <x-ui.dropdown-menu.separator />
-
-            <x-ui.dropdown-menu.item to="{{ route('portal') }}">
-                <x-svg.arrow-left class="size-5 rtl:rotate-180" />
-                Kembali ke Portal
-            </x-ui.dropdown-menu.item>
-        @endif
 
         <x-ui.dropdown-menu.separator />
 
