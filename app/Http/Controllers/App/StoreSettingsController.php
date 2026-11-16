@@ -2,21 +2,17 @@
 
 namespace App\Http\Controllers\App;
 
-use App\Enums\BusinessType;
-use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Models\StoreFeature;
 use App\Models\StoreSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
- * Pengaturan Toko (dulu App\Filament\Pages\StoreSettings): identitas usaha, logo,
- * jenis usaha & fitur, kontak, struk & printer.
+ * Pengaturan Toko (dulu App\Filament\Pages\StoreSettings): identitas usaha, logo, kontak,
+ * struk & printer. Jenis usaha & fitur hanya ditampilkan; menggantinya lewat wizard setup.
  */
 class StoreSettingsController extends Controller
 {
@@ -35,9 +31,6 @@ class StoreSettingsController extends Controller
             'store_name' => ['required', 'string', 'max:100'],
             'tagline' => ['nullable', 'string', 'max:150'],
             'logo' => ['nullable', 'image', 'max:1024'],
-            'business_type' => ['required', Rule::enum(BusinessType::class)],
-            'features' => ['array'],
-            'features.*' => [Rule::enum(Feature::class)],
             'address' => ['nullable', 'string'],
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:100'],
@@ -48,7 +41,6 @@ class StoreSettingsController extends Controller
             'store_name' => 'Nama Usaha',
             'tagline' => 'Keterangan Singkat',
             'logo' => 'Logo',
-            'business_type' => 'Jenis Usaha',
             'address' => 'Alamat',
             'phone' => 'Telepon / WhatsApp',
             'email' => 'Email',
@@ -58,8 +50,8 @@ class StoreSettingsController extends Controller
         ]);
 
         $setting = StoreSetting::current();
-        $features = $data['features'] ?? [];
-        $attributes = collect($data)->except(['logo', 'features'])->all();
+        // Jenis usaha & fitur tidak diubah di sini: hanya lewat wizard (tombol "Ganti Jenis Usaha").
+        $attributes = collect($data)->except(['logo'])->all();
         $oldLogo = $setting->logo;
 
         // Logo: ganti dengan file baru, atau hapus bila diminta. File lama dibuang dari disk.
@@ -69,10 +61,7 @@ class StoreSettingsController extends Controller
             $attributes['logo'] = null;
         }
 
-        DB::transaction(function () use ($setting, $attributes, $features) {
-            $setting->update($attributes);
-            StoreSetting::saveFeatures($features);
-        });
+        $setting->update($attributes);
 
         if (array_key_exists('logo', $attributes) && $oldLogo && $oldLogo !== $attributes['logo']) {
             Storage::disk('public')->delete($oldLogo);

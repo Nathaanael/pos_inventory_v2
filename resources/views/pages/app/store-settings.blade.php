@@ -1,19 +1,13 @@
 @extends('layouts.app')
-@use('App\Enums\BusinessType')
 @use('App\Enums\Feature')
 
 {{-- Pengaturan Toko (dulu App\Filament\Pages\StoreSettings). --}}
 @php
     $value = fn (string $field) => old($field, $setting->{$field});
     $invalid = fn (string $field) => $errors->has($field) ? 'true' : null;
-    $businesses = collect(BusinessType::cases())->mapWithKeys(fn ($t) => [$t->value => $t->label()]);
-    $presets = collect(BusinessType::cases())->mapWithKeys(fn ($t) => [$t->value => array_map(fn ($f) => $f->value, $t->defaultFeatures())]);
-    $featureList = collect(Feature::cases())->map(fn ($f) => [
-        'value' => $f->value,
-        'label' => $f->label(),
-        'description' => $f->description(),
-        'only' => $f->businessTypes() ? array_map(fn ($b) => $b->value, $f->businessTypes()) : null,
-    ])->values();
+    $business = $setting->business_type;
+    // Fitur aktif = fitur bawaan modul jenis usaha (tidak bisa dicentang di sini).
+    $moduleFeatures = collect(Feature::cases())->filter(fn ($f) => in_array($f->value, $enabledFeatures, true));
     $logoUrl = $setting->logoUrl();
 @endphp
 
@@ -22,27 +16,7 @@
 
     @include('pages.inventory.partials.form-errors')
 
-    <form method="POST" action="{{ route('store-settings.update') }}" enctype="multipart/form-data" class="space-y-6"
-        x-data="{
-            businessType: @js(old('business_type', $setting->business_type?->value)),
-            features: @js(old('features', $enabledFeatures)),
-            presets: @js($presets),
-            featureList: @js($featureList),
-            get available() {
-                return this.featureList.filter((f) => !f.only || (this.businessType && f.only.includes(this.businessType)));
-            },
-            toggle(value) {
-                this.features = this.features.includes(value) ? this.features.filter((f) => f !== value) : [...this.features, value];
-            },
-            applyPreset() {
-                if (this.presets[this.businessType]) this.features = [...this.presets[this.businessType]];
-            },
-            get allOn() { return this.available.every((f) => this.features.includes(f.value)); },
-            toggleAll() {
-                const values = this.available.map((f) => f.value);
-                this.features = this.allOn ? this.features.filter((f) => !values.includes(f)) : [...new Set([...this.features, ...values])];
-            },
-        }">
+    <form method="POST" action="{{ route('store-settings.update') }}" enctype="multipart/form-data" class="space-y-6">
         @csrf
         @method('PUT')
 
@@ -80,36 +54,54 @@
             </div>
         </x-common.component-card>
 
-        {{-- Jenis Usaha & Fitur --}}
-        <x-common.component-card title="Jenis Usaha & Fitur" desc="Mematikan fitur hanya menyembunyikan menu dan kolomnya; data yang sudah ada tidak dihapus.">
-            <x-common.form.field label="Jenis Usaha" for="business_type" required class="sm:max-w-sm">
-                <x-common.form.select id="business_type" name="business_type" :options="$businesses" placeholder="Pilih jenis usaha" required x-model="businessType" />
-            </x-common.form.field>
-
-            <div>
-                <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-400">Fitur Aktif</span>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <x-ui.button size="xs" variant="outline" x-on:click="toggleAll()" x-text="allOn ? 'Batalkan semua' : 'Pilih semua'"></x-ui.button>
-                        <x-ui.button size="xs" variant="outline" x-bind:disabled="!presets[businessType]" x-on:click="applyPreset()">
-                            <svg class="size-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
-                            Pakai fitur bawaan jenis usaha
-                        </x-ui.button>
+        {{-- Jenis Usaha & Fitur (hanya tampilan; diganti lewat wizard setup) --}}
+        <x-common.component-card title="Jenis Usaha & Fitur" desc="Jenis usaha menentukan modul dan fitur aplikasi. Fitur mengikuti modul dan tidak bisa diatur satu per satu.">
+            <div class="flex flex-col gap-4 rounded-2xl border border-gray-200 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+                <div class="flex items-center gap-4">
+                    <span class="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">
+                        <svg class="size-6 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $business?->iconPath() }}" /></svg>
+                    </span>
+                    <div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Jenis Usaha</p>
+                        <p class="text-base font-semibold text-gray-800 dark:text-white/90">{{ $business?->label() ?? 'Belum dipilih' }}</p>
+                        @if ($business)
+                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ $business->description() }}</p>
+                        @endif
                     </div>
                 </div>
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <template x-for="f in available" :key="f.value">
-                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition"
-                            x-bind:class="features.includes(f.value) ? 'border-brand-300 bg-brand-50/60 dark:border-brand-500/40 dark:bg-brand-500/5' : 'border-gray-200 hover:border-gray-300 dark:border-gray-800'">
-                            <input type="checkbox" name="features[]" x-bind:value="f.value" x-bind:checked="features.includes(f.value)" x-on:change="toggle(f.value)"
-                                class="mt-0.5 size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900" />
-                            <span>
-                                <span class="block text-sm font-medium text-gray-800 dark:text-white/90" x-text="f.label"></span>
-                                <span class="block text-xs text-gray-500 dark:text-gray-400" x-text="f.description"></span>
-                            </span>
-                        </label>
-                    </template>
-                </div>
+                <x-ui.button variant="outline" class="shrink-0"
+                    x-data x-on:click="$dispatch('confirm', {
+                        title: 'Ganti Jenis Usaha',
+                        message: 'Wizard setup akan dibuka lagi untuk memilih jenis usaha. Selama wizard belum diselesaikan, kasir tidak bisa berjualan. Data barang & transaksi tidak dihapus.',
+                        action: {{ \Illuminate\Support\Js::from(route('setup.restart')) }},
+                        method: 'POST',
+                        confirmLabel: 'Buka Wizard',
+                        variant: 'default',
+                    })">
+                    <svg class="size-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+                    Ganti Jenis Usaha
+                </x-ui.button>
+            </div>
+
+            <div>
+                <p class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-400">Fitur Modul</p>
+                @if ($moduleFeatures->isEmpty())
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Belum ada fitur aktif.</p>
+                @else
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        @foreach ($moduleFeatures as $feature)
+                            <div class="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/3">
+                                <span class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-success-500 text-white">
+                                    <x-svg.check class="size-3" />
+                                </span>
+                                <span>
+                                    <span class="block text-sm font-medium text-gray-800 dark:text-white/90">{{ $feature->label() }}</span>
+                                    <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $feature->description() }}</span>
+                                </span>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </div>
         </x-common.component-card>
 

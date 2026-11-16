@@ -90,6 +90,26 @@ class StoreSetting extends Model
         static::$featureCache = null;
     }
 
+    /**
+     * Terapkan modul jenis usaha: simpan jenis usaha & aktifkan tepat fitur bawaan modulnya.
+     * Dipakai wizard setup (satu-satunya tempat jenis usaha bisa diganti).
+     */
+    public function applyBusinessType(BusinessType $business): void
+    {
+        $this->update(['business_type' => $business]);
+        static::saveFeatures($business->features());
+    }
+
+    /**
+     * Buka wizard setup lagi (tombol "Ganti Jenis Usaha"). Identitas toko tetap tersimpan
+     * dan terisi otomatis di wizard; jenis usaha baru berlaku setelah wizard diselesaikan.
+     */
+    public function restartSetup(): void
+    {
+        $this->update(['setup_completed_at' => null]);
+        static::flushCache();
+    }
+
     public static function current(): self
     {
         if (static::$cached) {

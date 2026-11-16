@@ -62,11 +62,26 @@
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
                 <template x-for="item in filtered" :key="item.id">
                     <div role="button" tabindex="0" x-on:click="add(item)" x-on:keydown.enter="add(item)"
-                        class="relative flex cursor-pointer flex-col gap-1 rounded-xl border-2 p-3 transition hover:-translate-y-0.5 hover:shadow-theme-md"
+                        class="relative flex cursor-pointer flex-col gap-1 overflow-hidden rounded-xl border-2 p-3 transition hover:-translate-y-0.5 hover:shadow-theme-md"
                         x-bind:class="[toneFor(item.category_id), qtyOf(item.id) > 0 ? 'border-brand-500' : 'border-transparent', item.stock <= 0 && 'cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none']">
-                        <img x-show="item.image" x-bind:src="item.image" alt="" loading="lazy" class="absolute end-3 top-3 size-9 rounded-lg object-cover" />
+                        {{-- Gambar barang; bila belum ada foto, tampil gambar pengganti --}}
+                        <div class="relative mb-2 aspect-[4/3] w-full overflow-hidden rounded-lg bg-white/70 dark:bg-gray-900/60">
+                            <template x-if="item.image">
+                                <img x-bind:src="item.image" x-bind:alt="item.name" loading="lazy" class="size-full object-cover" />
+                            </template>
+                            <template x-if="!item.image">
+                                <div class="flex size-full flex-col items-center justify-center gap-1 text-gray-300 dark:text-gray-600">
+                                    <svg class="size-10 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                                    </svg>
+                                    <span class="text-lg font-bold text-gray-400 dark:text-gray-500" x-text="item.name.split(' ').slice(0, 2).map((w) => w.charAt(0)).join('').toUpperCase()"></span>
+                                </div>
+                            </template>
+                            <span x-show="qtyOf(item.id) > 0" x-text="qtyOf(item.id)"
+                                class="absolute end-2 top-2 flex min-w-6 items-center justify-center rounded-full bg-brand-500 px-1.5 py-0.5 text-xs font-bold text-white"></span>
+                        </div>
                         <span class="text-xs text-gray-500 dark:text-gray-400" x-text="categoryName(item.category_id)"></span>
-                        <span class="line-clamp-2 min-h-10 text-sm font-semibold text-gray-800 dark:text-white/90" x-bind:class="item.image && 'pe-10'" x-text="item.name"></span>
+                        <span class="line-clamp-2 min-h-10 text-sm font-semibold text-gray-800 dark:text-white/90" x-text="item.name"></span>
                         <span class="text-base font-bold text-gray-800 dark:text-white/90" x-text="money(price(item))"></span>
                         <div class="mt-1 flex items-center justify-between gap-2">
                             <span class="text-xs text-gray-500 dark:text-gray-400" x-bind:title="'Stok tersedia: ' + item.stock"

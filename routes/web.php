@@ -165,6 +165,8 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
         // Aplikasi
         Route::get('/setup', [SetupController::class, 'show'])->name('setup');
         Route::post('/setup', [SetupController::class, 'store'])->name('setup.store');
+        Route::post('/setup/ulang', [SetupController::class, 'restart'])->name('setup.restart');
+        Route::post('/setup/batal', [SetupController::class, 'cancel'])->name('setup.cancel');
 
         Route::get('/pengaturan-toko', [StoreSettingsController::class, 'edit'])->name('store-settings.edit');
         Route::put('/pengaturan-toko', [StoreSettingsController::class, 'update'])->name('store-settings.update');

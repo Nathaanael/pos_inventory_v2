@@ -49,7 +49,22 @@ enum BusinessType: string
     }
 
     /**
-     * Fitur yang langsung dicentang saat jenis usaha ini dipilih.
+     * Fitur MODUL jenis usaha ini. Setiap jenis usaha adalah modul dengan fitur yang tetap:
+     * fitur tidak bisa dicentang/dimatikan satu per satu, dan hanya berubah bila jenis usaha
+     * diganti lewat wizard setup (Pengaturan Toko → Ganti Jenis Usaha).
+     *
+     * Saat ini isi setiap modul masih berupa kumpulan fitur yang sama dengan preset lama;
+     * ke depan tiap modul (mis. FNB) akan punya inputan/halaman sendiri.
+     *
+     * @return array<int, Feature>
+     */
+    public function features(): array
+    {
+        return $this->defaultFeatures();
+    }
+
+    /**
+     * @deprecated Pakai features(). Disimpan agar kode lama tetap jalan.
      *
      * @return array<int, Feature>
      */
