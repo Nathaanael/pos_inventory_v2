@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none">
+  <rect width="480" height="360" rx="28" fill="#EEF2FF"/>
+  <circle cx="400" cy="74" r="44" fill="#DDE3FF"/>
+  <circle cx="64" cy="96" r="30" fill="#E0E7FF"/>
+  <ellipse cx="240" cy="304" rx="200" ry="14" fill="#C7D2FE"/>
+  <!-- Laptop -->
+  <rect x="122" y="80" width="230" height="150" rx="12" fill="#1E293B"/>
+  <rect x="134" y="92" width="206" height="126" rx="6" fill="#465FFF"/>
+  <rect x="148" y="106" width="80" height="10" rx="5" fill="#FFFFFF" opacity=".9"/>
+  <rect x="148" y="124" width="52" height="8" rx="4" fill="#FFFFFF" opacity=".5"/>
+  <path d="M152 200l30-26 24 14 34-38 30 22 34-30" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="270" y="104" width="56" height="34" rx="6" fill="#FFFFFF" opacity=".25"/>
+  <path d="M96 230h282l-14 26H110z" fill="#CBD5E1"/>
+  <rect x="96" y="226" width="282" height="8" rx="4" fill="#E2E8F0"/>
+  <rect x="210" y="240" width="54" height="8" rx="4" fill="#94A3B8"/>
+  <!-- Phone -->
+  <rect x="338" y="138" width="88" height="160" rx="16" fill="#0F172A"/>
+  <rect x="346" y="152" width="72" height="132" rx="8" fill="#A5B4FC"/>
+  <rect x="368" y="144" width="28" height="4" rx="2" fill="#334155"/>
+  <rect x="356" y="166" width="24" height="24" rx="6" fill="#FFFFFF"/>
+  <rect x="384" y="166" width="24" height="24" rx="6" fill="#465FFF"/>
+  <rect x="356" y="196" width="24" height="24" rx="6" fill="#465FFF"/>
+  <rect x="384" y="196" width="24" height="24" rx="6" fill="#FFFFFF"/>
+  <rect x="356" y="232" width="52" height="8" rx="4" fill="#FFFFFF" opacity=".8"/>
+  <rect x="356" y="248" width="34" height="8" rx="4" fill="#FFFFFF" opacity=".5"/>
+  <!-- Headphones -->
+  <path d="M44 250v-30a48 48 0 0 1 96 0v30" stroke="#334155" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <rect x="30" y="236" width="30" height="58" rx="12" fill="#465FFF"/>
+  <rect x="124" y="236" width="30" height="58" rx="12" fill="#465FFF"/>
+  <rect x="40" y="246" width="10" height="38" rx="5" fill="#9CB9FF"/>
+  <rect x="134" y="246" width="10" height="38" rx="5" fill="#9CB9FF"/>
+</svg>

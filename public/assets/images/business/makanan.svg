@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none">
+  <rect width="480" height="360" rx="28" fill="#FFF1F0"/>
+  <circle cx="380" cy="80" r="48" fill="#FECDCA"/>
+  <circle cx="90" cy="70" r="28" fill="#FEE4E2"/>
+  <rect x="24" y="282" width="432" height="22" rx="8" fill="#B45309"/>
+  <rect x="24" y="300" width="432" height="10" rx="4" fill="#92400E"/>
+  <!-- Coffee -->
+  <path d="M94 128c-8-14 8-22 0-36M120 128c-8-14 8-22 0-36M146 128c-8-14 8-22 0-36" stroke="#D0D5DD" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="120" cy="280" rx="70" ry="10" fill="#E4E7EC"/>
+  <path d="M172 170c30 0 30 50-6 50" stroke="#FFFFFF" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M68 146h104l-10 116a16 16 0 0 1-16 14h-52a16 16 0 0 1-16-14z" fill="#FFFFFF"/>
+  <path d="M70 168h100l-2 24H72z" fill="#F04438"/>
+  <ellipse cx="120" cy="146" rx="52" ry="8" fill="#7A2E0E"/>
+  <!-- Noodle bowl -->
+  <path d="M226 116l58 86M250 108l46 92" stroke="#92400E" stroke-width="7" stroke-linecap="round"/>
+  <ellipse cx="290" cy="206" rx="78" ry="16" fill="#FDE68A"/>
+  <path d="M232 202c10-14 20 6 30-8s20 6 30-8 20 6 30-8 18 4 26-2" stroke="#F59E0B" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <ellipse cx="320" cy="196" rx="18" ry="11" fill="#FFFFFF"/>
+  <circle cx="320" cy="196" r="7" fill="#FDB022"/>
+  <circle cx="260" cy="196" r="7" fill="#12B76A"/><circle cx="276" cy="200" r="5" fill="#12B76A"/>
+  <path d="M212 206h156a78 70 0 0 1-156 0z" fill="#F04438"/>
+  <path d="M226 236h128" stroke="#FFFFFF" stroke-width="5" stroke-dasharray="10 8" stroke-linecap="round"/>
+  <rect x="262" y="270" width="56" height="12" rx="4" fill="#D92D20"/>
+  <!-- Iced drink -->
+  <path d="M410 72l-24 70" stroke="#12B76A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M372 140h66l-10 140h-46z" fill="#FEC84B" opacity=".9"/>
+  <path d="M376 190h58l-7 90h-44z" fill="#F79009"/>
+  <rect x="366" y="132" width="78" height="14" rx="6" fill="#FFFFFF"/>
+  <rect x="388" y="160" width="14" height="14" rx="3" fill="#FFFFFF" opacity=".7"/>
+  <rect x="408" y="172" width="12" height="12" rx="3" fill="#FFFFFF" opacity=".7"/>
+</svg>

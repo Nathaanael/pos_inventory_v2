@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\StockOpname;
 use App\Support\Format;
 use App\Support\ItemCatalog;
+use App\Support\ModuleView;
 use App\Support\StatusBadge;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,12 @@ use Illuminate\View\View;
  */
 class StockOpnameController extends Controller
 {
+    /**
+     * UI per modul: resources/views/pages/inventory/stock-opnames/{modul}/{index,form}.blade.php.
+     * "default" dipakai modul selain FNB; FNB memakai folder "fnb" bila sudah dibuat.
+     */
+    private const VIEWS = 'pages.inventory.stock-opnames';
+
     public const ITEM_STATUS = [
         'cocok' => 'Cocok',
         'kurang' => 'Kurang',
@@ -40,7 +47,7 @@ class StockOpnameController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        return view('pages.inventory.stock-opnames.index', [
+        return ModuleView::make(self::VIEWS, 'index', [
             'title' => 'Stock Opname',
             'opnames' => $opnames,
         ]);
@@ -132,7 +139,7 @@ class StockOpnameController extends Controller
             'notes' => $l->notes,
         ])->all() ?? []);
 
-        return view('pages.inventory.stock-opnames.form', [
+        return ModuleView::make(self::VIEWS, 'form', [
             'title' => $opname->exists ? 'Lanjutkan Stock Opname' : 'Tambah Stock Opname',
             'opname' => $opname,
             'code' => $opname->code ?? StockOpname::generateTransactionCode('SO', 'code'),

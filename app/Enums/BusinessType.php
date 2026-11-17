@@ -36,6 +36,12 @@ enum BusinessType: string
         };
     }
 
+    /** Ilustrasi jenis usaha (public/assets/images/business/{value}.svg), mis. untuk halaman login. */
+    public function illustration(): string
+    {
+        return asset("assets/images/business/{$this->value}.svg");
+    }
+
     /** Ikon kartu (SVG path Heroicons outline). */
     public function iconPath(): string
     {
@@ -61,6 +67,18 @@ enum BusinessType: string
     public function features(): array
     {
         return $this->defaultFeatures();
+    }
+
+    /**
+     * Kunci modul untuk UI per modul (lihat App\Support\ModuleView). Jenis usaha yang
+     * belum punya UI sendiri memakai "default".
+     */
+    public function module(): string
+    {
+        return match ($this) {
+            self::Makanan => 'fnb',
+            default => 'default',
+        };
     }
 
     /* ----------------------------- Kemampuan modul ----------------------------- */

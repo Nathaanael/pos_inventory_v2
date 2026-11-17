@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" fill="none">
+  <rect width="480" height="360" rx="28" fill="#FDF2FA"/>
+  <circle cx="404" cy="80" r="46" fill="#FCE7F6"/>
+  <circle cx="60" cy="300" r="70" fill="#FCE7F6"/>
+  <!-- Rail -->
+  <rect x="48" y="62" width="276" height="10" rx="5" fill="#475467"/>
+  <path d="M60 72v232M312 72v232" stroke="#475467" stroke-width="8" stroke-linecap="round"/>
+  <path d="M40 306h40M292 306h40" stroke="#475467" stroke-width="8" stroke-linecap="round"/>
+  <!-- Shirt -->
+  <path d="M136 72v14M136 86l-34 20h68z" stroke="#98A2B3" stroke-width="4" stroke-linejoin="round" fill="none"/>
+  <path d="M110 102l-34 20 12 32 18-8v96h60v-96l18 8 12-32-34-20c-4 14-14 20-26 20s-22-6-26-20z" fill="#EE46BC"/>
+  <path d="M126 102c2 10 6 14 10 14s8-4 10-14" fill="#C11574"/>
+  <rect x="122" y="190" width="28" height="4" rx="2" fill="#FFFFFF" opacity=".6"/>
+  <!-- Dress -->
+  <path d="M240 72v14M240 86l-30 18h60z" stroke="#98A2B3" stroke-width="4" stroke-linejoin="round" fill="none"/>
+  <path d="M220 102h40l-4 46 36 116h-104l36-116z" fill="#7A5AF8"/>
+  <path d="M224 148h32" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M206 236l12 12 12-12 12 12 12-12 12 12 12-12" stroke="#BDB4FE" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Bag -->
+  <path d="M362 176v-18a28 28 0 0 1 56 0v18" stroke="#C11574" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <path d="M340 172h100l10 128H330z" fill="#EE46BC"/>
+  <path d="M340 172h100l2 22H338z" fill="#DD2590"/>
+  <circle cx="390" cy="236" r="18" fill="#FFFFFF" opacity=".9"/>
+  <path d="M382 236l6 6 11-12" stroke="#EE46BC" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Sneaker -->
+  <path d="M84 268c10 0 18-8 30-8 6 12 26 16 46 18 14 2 20 10 20 18v4H84z" fill="#FFFFFF"/>
+  <path d="M84 292h96v8H84z" fill="#7A5AF8"/>
+  <path d="M110 268l6 10M122 266l6 10M134 268l6 10" stroke="#EE46BC" stroke-width="3" stroke-linecap="round"/>
+  <rect x="24" y="306" width="432" height="6" rx="3" fill="#FAA7E0"/>
+</svg>
