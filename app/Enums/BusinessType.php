@@ -111,6 +111,15 @@ enum BusinessType: string
     }
 
     /**
+     * Modul memakai Hitung Kas (uang fisik vs sistem per shift kasir) sebagai pengganti
+     * Stock Opname barang? Stock opname barang FNB akan punya halaman sendiri nanti.
+     */
+    public function usesCashCount(): bool
+    {
+        return $this === self::Makanan;
+    }
+
+    /**
      * @deprecated Pakai features(). Disimpan agar kode lama tetap jalan.
      *
      * @return array<int, Feature>

@@ -84,6 +84,7 @@
         @yield('content')
     </main>
 
+    <x-common.loading-bar />
     <x-common.flash />
     <x-common.confirm-dialog />
 </body>

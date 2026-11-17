@@ -5,6 +5,7 @@ namespace App\Http\Controllers\App;
 use App\Http\Controllers\Controller;
 use App\Models\StoreFeature;
 use App\Models\StoreSetting;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +26,7 @@ class StoreSettingsController extends Controller
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
             'store_name' => ['required', 'string', 'max:100'],
@@ -37,6 +38,7 @@ class StoreSettingsController extends Controller
             'tax_number' => ['nullable', 'string', 'max:50'],
             'receipt_footer' => ['nullable', 'string', 'max:255'],
             'printer_name' => ['nullable', 'string', 'max:100'],
+            'cash_count_tolerance' => ['nullable', 'numeric', 'min:0'],
         ], [], [
             'store_name' => 'Nama Usaha',
             'tagline' => 'Keterangan Singkat',
@@ -47,11 +49,16 @@ class StoreSettingsController extends Controller
             'tax_number' => 'NPWP',
             'receipt_footer' => 'Teks Penutup Struk',
             'printer_name' => 'Nama Printer Thermal',
+            'cash_count_tolerance' => 'Toleransi Selisih Kas',
         ]);
 
         $setting = StoreSetting::current();
         // Jenis usaha & fitur tidak diubah di sini: hanya lewat wizard (tombol "Ganti Jenis Usaha").
         $attributes = collect($data)->except(['logo'])->all();
+        // Field toleransi hanya tampil di modul FNB; kosong = 0.
+        if (array_key_exists('cash_count_tolerance', $attributes)) {
+            $attributes['cash_count_tolerance'] = (float) ($attributes['cash_count_tolerance'] ?? 0);
+        }
         $oldLogo = $setting->logo;
 
         // Logo: ganti dengan file baru, atau hapus bila diminta. File lama dibuang dari disk.
@@ -69,6 +76,8 @@ class StoreSettingsController extends Controller
 
         StoreSetting::flushCache();
 
-        return redirect()->route('store-settings.edit')->with('success', 'Pengaturan toko disimpan');
+        return $request->expectsJson()
+            ? $this->respond($request, 'Pengaturan toko disimpan')
+            : redirect()->route('store-settings.edit')->with('success', 'Pengaturan toko disimpan');
     }
 }

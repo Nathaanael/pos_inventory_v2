@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Inventory\InboundController;
 use App\Http\Controllers\Inventory\OutboundController;
 use App\Http\Controllers\Inventory\ReturnTransactionController;
+use App\Http\Controllers\Inventory\CashCountController;
 use App\Http\Controllers\Inventory\StockOpnameController;
 use App\Http\Controllers\Inventory\WasteLogController;
 use App\Http\Controllers\ItemController;
@@ -180,13 +181,22 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::post('/{outbound}/void', 'void')->name('void');
         });
 
-        Route::controller(StockOpnameController::class)->prefix('stock-opnames')->name('stock-opnames.')->middleware('feature:stock_opname')->group(function () {
+        // Modul FNB memakai Hitung Kas; stock opname barang FNB menyusul di halaman sendiri.
+        Route::controller(StockOpnameController::class)->prefix('stock-opnames')->name('stock-opnames.')->middleware(['feature:stock_opname', 'module:item_opname'])->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/create', 'create')->name('create');
             Route::post('/', 'store')->name('store');
             Route::get('/{stockOpname}/edit', 'edit')->name('edit');
             Route::put('/{stockOpname}', 'update')->name('update');
             Route::get('/{stockOpname}/detail', 'show')->name('show');
+        });
+
+        Route::controller(CashCountController::class)->prefix('hitung-kas')->name('cash-counts.')->middleware('module:cash_count')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/shift/{shift}', 'create')->name('create');
+            Route::post('/shift/{shift}', 'store')->name('store');
+            Route::get('/{cashCount}', 'show')->name('show');
+            Route::post('/{cashCount}/approve', 'approve')->name('approve');
         });
 
         Route::controller(WasteLogController::class)->prefix('waste-logs')->name('waste-logs.')->middleware('module:recipes')->group(function () {

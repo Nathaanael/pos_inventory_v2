@@ -16,7 +16,9 @@
 
     @include('pages.inventory.partials.form-errors')
 
-    <form method="POST" action="{{ route('store-settings.update') }}" enctype="multipart/form-data" class="space-y-6">
+    {{-- AJAX + loading bar; form & logo/nama toko di sidebar/header (data-ajax-region="store-brand") diperbarui. --}}
+    <form id="store-settings-form" method="POST" action="{{ route('store-settings.update') }}" enctype="multipart/form-data" class="space-y-6"
+        x-data="ajaxForm({ regions: ['store-settings-form', 'store-brand'] })" x-on:submit.prevent="submit">
         @csrf
         @method('PUT')
 
@@ -136,6 +138,20 @@
             </div>
         </x-common.component-card>
 
-        <x-ui.button type="submit">Simpan Pengaturan</x-ui.button>
+        @if (\App\Models\StoreSetting::usesCashCount())
+            {{-- Hitung Kas (modul FNB) --}}
+            <x-common.component-card title="Hitung Kas" desc="Uang fisik di laci dibandingkan dengan uang di sistem setiap tutup shift dan cek dadakan.">
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <x-common.form.field label="Toleransi Selisih Kas" for="cash_count_tolerance"
+                        hint="Selisih sampai nominal ini dianggap cocok. Di atasnya, hitung kas perlu direview admin dengan catatan penjelasan.">
+                        <x-common.form.money id="cash_count_tolerance" name="cash_count_tolerance" :value="$value('cash_count_tolerance') ?? 0" :invalid="$errors->has('cash_count_tolerance')" />
+                    </x-common.form.field>
+                </div>
+            </x-common.component-card>
+        @endif
+
+        <x-ui.button type="submit" x-bind:disabled="busy">
+                        <span x-text="busy ? 'Menyimpan…' : 'Simpan Pengaturan'">Simpan Pengaturan</span>
+                    </x-ui.button>
     </form>
 @endsection

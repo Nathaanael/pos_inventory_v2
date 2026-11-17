@@ -230,7 +230,7 @@ class ThermalPrintService
     /**
      * Cetak laporan Shift Kasir (X-Report saat masih buka, Z-Report setelah tutup).
      */
-    public function printShiftReport(CashierShift $shift): void
+    public function printShiftReport(CashierShift $shift, bool $showExpected = true): void
     {
         $store = StoreSetting::current();
         $printerName = $store->printer_name ?: env('THERMAL_PRINTER_NAME', 'RP58 Printer');
@@ -273,9 +273,11 @@ class ThermalPrintService
 
             $printer->text($this->twoColumns('Kas Masuk', $money($summary['cash_in'])) . "\n");
             $printer->text($this->twoColumns('Kas Keluar', $money($summary['cash_out'])) . "\n");
-            $printer->setEmphasis(true);
-            $printer->text($this->twoColumns('Est. Kas Laci', $money($summary['expected_cash'])) . "\n");
-            $printer->setEmphasis(false);
+            if ($showExpected) {
+                $printer->setEmphasis(true);
+                $printer->text($this->twoColumns('Est. Kas Laci', $money($summary['expected_cash'])) . "\n");
+                $printer->setEmphasis(false);
+            }
 
             if ($shift->status === CashierShift::STATUS_CLOSED) {
                 $printer->text($this->twoColumns('Kas Aktual', $money((float) $shift->actual_cash)) . "\n");

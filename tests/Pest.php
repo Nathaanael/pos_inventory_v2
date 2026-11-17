@@ -45,3 +45,16 @@ function something()
 {
     // ..
 }
+
+/**
+ * Buka shift kasir untuk pengguna. Modul FNB mewajibkan shift aktif sebelum checkout POS.
+ */
+function openShiftFor(\App\Models\User $user, float $openingCash = 0): \App\Models\CashierShift
+{
+    return \App\Models\CashierShift::create([
+        'user_id' => $user->id,
+        'opened_at' => now(),
+        'opening_cash' => $openingCash,
+        'status' => \App\Models\CashierShift::STATUS_OPEN,
+    ]);
+}

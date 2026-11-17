@@ -8,7 +8,13 @@
 @endphp
 
 @section('content')
-    @if (! $activeShift)
+    @if ($shiftRequired)
+        {{-- Modul FNB: transaksi diblokir sampai shift dibuka (server juga menolak checkout). --}}
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400">
+            <span><strong>Shift kasir belum dibuka.</strong> Transaksi tidak bisa disimpan sebelum shift dibuka, agar uang masuk tercatat di laci kas.</span>
+            <a href="{{ route('kasir.shift.index') }}" class="rounded-lg bg-error-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-error-600">Buka Shift</a>
+        </div>
+    @elseif (! $activeShift)
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
             <span>Shift kasir belum dibuka. Buka shift terlebih dahulu agar transaksi tercatat dalam laporan laci kas (X/Z-Report).</span>
             <a href="{{ route('kasir.shift.index') }}" class="rounded-lg bg-warning-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-warning-600">Buka Shift</a>
@@ -23,6 +29,7 @@
             preselectTable: @js($preselectTable),
             activeOrder: @js($activeOrder),
             usesModifiers: @js($usesModifiers),
+            shiftRequired: @js($shiftRequired),
             checkoutUrl: @js(route('kasir.checkout')),
             addItemsUrlTemplate: @js(route('kasir.orders.add-items', '__ID__')),
             mejaUrl: @js(route('kasir.meja')),
@@ -317,6 +324,9 @@
                         </x-ui.button>
                     </div>
                 </template>
+                <p x-show="shiftRequired && !activeOrder" x-cloak class="-mt-2 text-center text-xs text-error-500">
+                    Buka shift kasir dulu untuk menyimpan transaksi · <a href="{{ route('kasir.shift.index') }}" class="font-medium underline">Buka Shift</a>
+                </p>
                 <p x-show="!activeOrder && needsTable && cart.length && !selectedTable" class="-mt-2 text-center text-xs text-error-500">Pilih meja dulu · tekan Simpan untuk membuka daftar meja</p>
                 <p class="-mt-2 text-center text-xs text-gray-400">Ctrl+Enter untuk simpan</p>
             </div>

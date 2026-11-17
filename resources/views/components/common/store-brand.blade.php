@@ -8,7 +8,7 @@
     $logo = \App\Models\StoreSetting::current()->logoUrl();
     $name = \App\Models\StoreSetting::storeName();
 @endphp
-<a href="{{ $href }}" title="{{ $name }}" {{ $attributes->merge(['class' => 'flex min-w-0 items-center gap-3']) }}>
+<a href="{{ $href }}" title="{{ $name }}" data-ajax-region="store-brand" {{ $attributes->merge(['class' => 'flex min-w-0 items-center gap-3']) }}>
     @if ($logo)
         {{-- Sidebar diciutkan: logo kecil persegi; selain itu logo penuh. --}}
         <img src="{{ $logo }}" alt="{{ $name }}" @class([

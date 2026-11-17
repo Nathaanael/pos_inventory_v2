@@ -31,6 +31,11 @@ class StatusBadge
             'selesai' => ['Selesai', 'success'],
             'draft' => ['Draft', 'warning'],
         ],
+        'cash_count' => [
+            'cocok' => ['Cocok', 'success'],
+            'perlu_review' => ['Perlu Review', 'warning'],
+            'disetujui' => ['Selisih Disetujui', 'info'],
+        ],
     ];
 
     /** @return array{0: string, 1: string} [label, warna] */

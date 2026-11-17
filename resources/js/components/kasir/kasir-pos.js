@@ -28,6 +28,7 @@ export default (config = {}) => ({
     taxRules: config.taxRules ?? [],      // master Pajak & Biaya Layanan (modul FNB)
     usesModifiers: config.usesModifiers ?? false,
     activeOrder: config.activeOrder ?? null,
+    shiftRequired: config.shiftRequired ?? false,   // FNB tanpa shift aktif: simpan transaksi diblokir
     search: '',
     activeCategory: null,
     cart: [],                             // [{ uid, id, qty, modifier_ids, modifiers, modifiers_total, notes }]
@@ -370,12 +371,12 @@ export default (config = {}) => ({
     },
 
     get canSubmit() {
-        if (this.saving || !this.cart.length) return false;
+        if (this.shiftRequired || this.saving || !this.cart.length) return false;
         return this.payment !== 'tunai' || this.paidNumber >= this.total;
     },
 
     get canSaveOpenBill() {
-        return !this.saving && this.cart.length > 0 && this.usesModifiers;
+        return !this.shiftRequired && !this.saving && this.cart.length > 0 && this.usesModifiers;
     },
 
     // ---------- search / scanner ----------
@@ -479,6 +480,7 @@ export default (config = {}) => ({
                 this.resetSale();
                 this.$nextTick(() => this.$refs.search?.focus());
             } else {
+                if (result?.shift_required) this.shiftRequired = true;
                 toast('error', result?.message ?? 'Gagal menyimpan transaksi.');
             }
         } catch (e) {

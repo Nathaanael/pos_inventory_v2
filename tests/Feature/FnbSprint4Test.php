@@ -73,6 +73,9 @@ function setupSprint4Store(): array
         'is_active' => true,
     ]);
 
+    // Modul FNB: checkout POS wajib di dalam shift kasir.
+    openShiftFor($kasir);
+
     return compact('admin', 'kasir', 't1', 't2', 'item');
 }
 

@@ -95,6 +95,9 @@ function setupRecipeStore(): array
     $recipe->ingredients()->create(['ingredient_item_id' => $coffeeBeans->id, 'quantity' => 20, 'unit_id' => $gram->id]);
     $recipe->ingredients()->create(['ingredient_item_id' => $milk->id, 'quantity' => 150, 'unit_id' => $ml->id]);
 
+    // Modul FNB: checkout POS wajib di dalam shift kasir.
+    openShiftFor($kasir);
+
     return compact('kasir', 'table', 'coffeeBeans', 'milk', 'latte');
 }
 

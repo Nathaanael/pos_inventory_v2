@@ -48,6 +48,11 @@ class CashierShift extends Model
         return $this->hasMany(OutboundPayment::class);
     }
 
+    public function cashCounts(): HasMany
+    {
+        return $this->hasMany(CashCount::class)->latest('counted_at');
+    }
+
     public function scopeOpen(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_OPEN);

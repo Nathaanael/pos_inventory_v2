@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashCount;
 use App\Models\CashierShift;
 use App\Models\CashMovement;
+use App\Models\StoreSetting;
 use App\Services\ThermalPrintService;
+use App\Support\CashDenominations;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,15 +41,21 @@ class ShiftController extends Controller
             'summary' => $activeShift?->summary(),
             'movements' => $activeShift ? $activeShift->movements()->with('createdBy:id,name')->get() : collect(),
             'history' => $history,
+            // Blind closing: estimasi kas laci shift aktif hanya terlihat oleh admin.
+            'showExpected' => $user->isAdmin(),
+            // Admin melihat semua shift yang sedang berjalan (semua kasir).
+            'otherActiveShifts' => $user->isAdmin()
+                ? CashierShift::query()->open()->where('user_id', '!=', $user->id)->with('user:id,name')->withCount('outbounds')->oldest('opened_at')->get()
+                : collect(),
         ]);
     }
 
-    public function open(Request $request): RedirectResponse
+    public function open(Request $request): RedirectResponse|JsonResponse
     {
         $user = $request->user();
 
         if (CashierShift::activeFor($user->id)) {
-            return back()->with('error', ['Shift masih aktif', 'Tutup shift yang sedang berjalan terlebih dahulu.']);
+            return $this->respondError($request, ['Shift masih aktif', 'Tutup shift yang sedang berjalan terlebih dahulu.']);
         }
 
         $data = $request->validate([
@@ -63,14 +73,14 @@ class ShiftController extends Controller
             'notes' => $data['notes'] ?? null,
         ]);
 
-        return back()->with('success', 'Shift kasir berhasil dibuka.');
+        return $this->respond($request, 'Shift kasir berhasil dibuka.');
     }
 
-    public function storeCashMovement(Request $request): RedirectResponse
+    public function storeCashMovement(Request $request): RedirectResponse|JsonResponse
     {
         $shift = CashierShift::activeFor($request->user()->id);
         if (! $shift) {
-            return back()->with('error', ['Belum ada shift aktif', 'Buka shift terlebih dahulu.']);
+            return $this->respondError($request, ['Belum ada shift aktif', 'Buka shift terlebih dahulu.']);
         }
 
         $data = $request->validate([
@@ -91,24 +101,20 @@ class ShiftController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        return back()->with('success', 'Mutasi kas berhasil dicatat.');
+        return $this->respond($request, 'Mutasi kas berhasil dicatat.');
     }
 
-    public function close(Request $request): RedirectResponse
+    public function close(Request $request): RedirectResponse|JsonResponse
     {
         $shift = CashierShift::activeFor($request->user()->id);
         if (! $shift) {
-            return back()->with('error', ['Belum ada shift aktif', 'Tidak ada shift yang bisa ditutup.']);
+            return $this->respondError($request, ['Belum ada shift aktif', 'Tidak ada shift yang bisa ditutup.']);
         }
 
-        $data = $request->validate([
-            'actual_cash' => ['required', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ], [], [
-            'actual_cash' => 'Uang Fisik di Laci',
-        ]);
+        // Uang fisik: per pecahan atau total langsung (lihat CashDenominations).
+        $data = CashDenominations::validate($request);
 
-        DB::transaction(function () use ($shift, $data) {
+        DB::transaction(function () use ($shift, $data, $request) {
             $locked = CashierShift::lockForUpdate()->findOrFail($shift->id);
             if ($locked->status !== CashierShift::STATUS_OPEN) {
                 return;
@@ -116,7 +122,7 @@ class ShiftController extends Controller
 
             $summary = $locked->summary();
             $expected = (float) $summary['expected_cash'];
-            $actual = (float) $data['actual_cash'];
+            $actual = $data['actual_cash'];
 
             $locked->update([
                 'closed_at' => now(),
@@ -126,22 +132,28 @@ class ShiftController extends Controller
                 'status' => CashierShift::STATUS_CLOSED,
                 'notes' => $data['notes'] ?? $locked->notes,
             ]);
+
+            // Modul FNB: tutup shift otomatis tercatat di Hitung Kas (selisih di luar toleransi → perlu review admin).
+            if (StoreSetting::usesCashCount()) {
+                CashCount::record($locked, CashCount::TYPE_CLOSING, $actual, $data['denominations'], $request->user()->id, $data['notes'], $summary);
+            }
         });
 
-        return back()->with('success', 'Shift kasir berhasil ditutup (Z-Report tersimpan).');
+        return $this->respond($request, 'Shift kasir berhasil ditutup (Z-Report tersimpan).');
     }
 
-    public function printReport(Request $request, CashierShift $shift, ThermalPrintService $printer): RedirectResponse
+    public function printReport(Request $request, CashierShift $shift, ThermalPrintService $printer): RedirectResponse|JsonResponse
     {
         abort_unless($request->user()->isAdmin() || (int) $shift->user_id === (int) $request->user()->id, 403);
 
         try {
             $shift->load('user');
-            $printer->printShiftReport($shift);
+            // Blind closing: kasir tidak melihat estimasi kas laci selama shift masih berjalan.
+            $printer->printShiftReport($shift, showExpected: $request->user()->isAdmin() || $shift->status === CashierShift::STATUS_CLOSED);
         } catch (Throwable $e) {
-            return back()->with('error', ['Gagal cetak laporan shift', $e->getMessage()]);
+            return $this->respondError($request, ['Gagal cetak laporan shift', $e->getMessage()], 500);
         }
 
-        return back()->with('success', 'Laporan shift berhasil dicetak!');
+        return $this->respond($request, 'Laporan shift berhasil dicetak!');
     }
 }

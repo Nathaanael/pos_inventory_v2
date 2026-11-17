@@ -71,7 +71,9 @@ class KasirController extends Controller
             'activeOrder' => $activeOrder,
             'hasWholesale' => StoreSetting::hasFeature(Feature::WholesalePrice),
             'usesModifiers' => StoreSetting::usesModifiers(),
-            'activeShift' => \App\Models\CashierShift::activeFor($request->user()?->id),
+            'activeShift' => $activeShift = \App\Models\CashierShift::activeFor($request->user()?->id),
+            // Modul FNB: transaksi wajib di dalam shift kasir (agar masuk Hitung Kas).
+            'shiftRequired' => StoreSetting::usesCashCount() && ! $activeShift,
             'taxRules' => app(TaxCalculator::class)->rules(),
         ]);
     }
@@ -102,6 +104,10 @@ class KasirController extends Controller
             'discount_value' => ['nullable', 'numeric', 'min:0'],
             'discount_reason' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if ($blocked = $this->requireShift($request)) {
+            return $blocked;
+        }
 
         // Pengaman transaksi dobel: setiap penjualan di browser punya sale_id unik.
         // Kalau id yang sama dikirim lagi (klik ganda, koneksi ulang, tab ganda), tolak.
@@ -177,6 +183,10 @@ class KasirController extends Controller
             'payments.*.payment_method' => ['required_with:payments', 'string'],
             'payments.*.amount' => ['required_with:payments', 'numeric', 'min:1'],
         ]);
+
+        if ($blocked = $this->requireShift($request)) {
+            return $blocked;
+        }
 
         if ($outbound->status !== TransactionStatus::OPEN) {
             return response()->json(['ok' => false, 'message' => 'Pesanan ini sudah dibayar atau dibatalkan.']);
@@ -790,5 +800,22 @@ class KasirController extends Controller
         }
 
         return ['order_type' => OrderType::DineIn->value, 'dining_table_id' => $tableId];
+    }
+
+    /**
+     * Modul FNB: checkout & pembayaran hanya bisa dilakukan saat pengguna punya shift kasir aktif,
+     * supaya setiap uang masuk tercatat di shift dan ikut dihitung di Hitung Kas.
+     */
+    private function requireShift(Request $request): ?JsonResponse
+    {
+        if (! StoreSetting::usesCashCount() || \App\Models\CashierShift::activeFor($request->user()?->id)) {
+            return null;
+        }
+
+        return response()->json([
+            'ok' => false,
+            'shift_required' => true,
+            'message' => 'Buka shift kasir terlebih dahulu sebelum menyimpan transaksi.',
+        ]);
     }
 }

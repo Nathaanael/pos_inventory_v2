@@ -103,6 +103,9 @@ function setupFnbStore(): array
 
     $item->modifierGroups()->sync([$sugarGroup->id, $toppingGroup->id]);
 
+    // Modul FNB: checkout POS wajib di dalam shift kasir.
+    openShiftFor($kasir);
+
     return compact('admin', 'kasir', 'table', 'item', 'normalSugar', 'lessSugar', 'oatMilk');
 }
 

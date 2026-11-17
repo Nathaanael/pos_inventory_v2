@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\WasteLog;
 use App\Services\StockService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -43,7 +44,7 @@ class WasteLogController extends Controller
         ]);
     }
 
-    public function store(Request $request, StockService $stock): RedirectResponse
+    public function store(Request $request, StockService $stock): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
             'item_id' => ['required', Rule::exists('items', 'id')],
@@ -61,9 +62,13 @@ class WasteLogController extends Controller
         try {
             $stock->recordWaste($item, (float) $data['quantity'], $data['reason'], $data['notes'] ?? null);
         } catch (ValidationException $e) {
+            if ($request->expectsJson()) {
+                throw $e; // 422 JSON untuk ajaxForm
+            }
+
             return back()->withErrors($e->errors())->withInput();
         }
 
-        return back()->with('success', 'Waste berhasil dicatat dan stok telah disesuaikan.');
+        return $this->respond($request, 'Waste berhasil dicatat dan stok telah disesuaikan.');
     }
 }

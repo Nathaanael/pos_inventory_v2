@@ -20,6 +20,9 @@ class EnsureModuleCapability
             'taxes' => StoreSetting::usesTaxes(),
             'modifiers' => StoreSetting::usesModifiers(),
             'recipes' => StoreSetting::usesRecipes(),
+            'cash_count' => StoreSetting::usesCashCount(),
+            // Stock opname barang saat ini hanya untuk modul selain FNB (FNB memakai Hitung Kas).
+            'item_opname' => ! StoreSetting::usesCashCount(),
             default => false,
         };
 

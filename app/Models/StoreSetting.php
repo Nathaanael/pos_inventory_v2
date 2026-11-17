@@ -29,6 +29,7 @@ class StoreSetting extends Model
         return [
             'business_type' => BusinessType::class,
             'setup_completed_at' => 'datetime',
+            'cash_count_tolerance' => 'float',
         ];
     }
 
@@ -112,6 +113,12 @@ class StoreSetting extends Model
     public static function usesRecipes(): bool
     {
         return static::current()->business_type?->usesRecipes() ?? false;
+    }
+
+    /** Modul aktif memakai Hitung Kas per shift kasir (FNB)? */
+    public static function usesCashCount(): bool
+    {
+        return static::current()->business_type?->usesCashCount() ?? false;
     }
 
     /**
