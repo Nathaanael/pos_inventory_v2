@@ -284,7 +284,7 @@
                                     <span class="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-600 dark:bg-brand-500/15 dark:text-brand-400" x-text="f.label"></span>
                                 </template>
                             </dd>
-                            <button type="button" class="text-sm text-brand-500 hover:underline" x-on:click="goTo(2)">Ubah</button>
+                            {{-- Fitur mengikuti modul jenis usaha (tidak bisa diubah sendiri), jadi tanpa tombol Ubah. --}}
                         </div>
                     </dl>
 

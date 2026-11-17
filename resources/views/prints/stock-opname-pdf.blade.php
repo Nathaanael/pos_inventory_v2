@@ -180,13 +180,13 @@
             <tr>
                 <td class="text-center">{{ $index + 1 }}</td>
                 <td>{{ $item->item?->name ?? 'Item Dihapus' }}</td>
-                <td class="text-center">{{ number_format($item->system_stock) }} {{ $item->item?->unit?->name }}</td>
-                <td class="text-center">{{ number_format($item->physical_stock) }} {{ $item->item?->unit?->name }}</td>
+                <td class="text-center">{{ \App\Support\Format::qty($item->system_stock) }} {{ $item->item?->unit?->name }}</td>
+                <td class="text-center">{{ \App\Support\Format::qty($item->physical_stock) }} {{ $item->item?->unit?->name }}</td>
                 <td class="text-center">
                     @if($item->difference > 0)
-                        <span class="diff-plus">+{{ number_format($item->difference) }}</span>
+                        <span class="diff-plus">+{{ \App\Support\Format::qty($item->difference) }}</span>
                     @elseif($item->difference < 0)
-                        <span class="diff-minus">{{ number_format($item->difference) }}</span>
+                        <span class="diff-minus">{{ \App\Support\Format::qty($item->difference) }}</span>
                     @else
                         -
                     @endif
@@ -202,7 +202,7 @@
             <tr>
                 <td class="summary-label">Total Item Diperiksa</td>
                 <td>:</td>
-                <td class="text-right">{{ number_format($stockOpname->total_items_scanned) }}</td>
+                <td class="text-right">{{ \App\Support\Format::qty($stockOpname->total_items_scanned) }}</td>
             </tr>
             <tr>
                 <td class="summary-label">Total Sesuai</td>
@@ -212,7 +212,7 @@
             <tr>
                 <td class="summary-label">Total Ada Selisih</td>
                 <td>:</td>
-                <td class="text-right">{{ number_format($stockOpname->total_difference) }}</td>
+                <td class="text-right">{{ \App\Support\Format::signedQty($stockOpname->total_difference) }}</td>
             </tr>
         </table>
     </div>

@@ -15,6 +15,9 @@ class StockOpname extends Model
     protected $casts = [
         'date' => 'date',
         'status' => TransactionStatus::class,
+        // Desimal: stok FNB (bahan baku) bisa pecahan, mis. 1,25 kg.
+        'total_items_scanned' => 'float',
+        'total_difference' => 'float',
     ];
 
     protected static function booted()

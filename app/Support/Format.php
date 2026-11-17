@@ -28,6 +28,22 @@ class Format
         return Carbon::parse($date)->locale('id')->translatedFormat($format);
     }
 
+    /** Jumlah stok, desimal hanya bila ada (maks. 4 digit): "1.250", "1,25", "0,0005". */
+    public static function qty(float|int|string|null $value): string
+    {
+        $formatted = number_format(round((float) $value, 4), 4, ',', '.');
+
+        return rtrim(rtrim($formatted, '0'), ',');
+    }
+
+    /** Jumlah stok dengan tanda: "+1,5", "-2", "0" */
+    public static function signedQty(float|int|string|null $value): string
+    {
+        $value = round((float) $value, 4);
+
+        return ($value > 0 ? '+' : '').static::qty($value);
+    }
+
     /** Angka dengan tanda: "+3", "-2", "0" */
     public static function signed(int|float|null $value): string
     {

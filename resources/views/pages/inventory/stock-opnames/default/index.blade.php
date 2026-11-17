@@ -31,8 +31,8 @@
                 @forelse ($opnames as $opname)
                     @php
                         [$statusLabel, $statusColor] = StatusBadge::for('opname', $opname->status);
-                        $diff = (int) $opname->total_difference;
-                        [$itemLabel, $itemColor] = $diff === 0 ? ['Cocok', 'success'] : ($diff > 0 ? ['Lebih', 'warning'] : ['Kurang', 'error']);
+                        $diff = round((float) $opname->total_difference, 4);
+                        [$itemLabel, $itemColor] = $diff == 0 ? ['Cocok', 'success'] : ($diff > 0 ? ['Lebih', 'warning'] : ['Kurang', 'error']);
                         $viewCall = 'view('.Js::from(route('stock-opnames.show', $opname)).', '.Js::from('Stock Opname '.$opname->code).')';
                     @endphp
                     <tr class="table-row cursor-pointer" x-on:click="if (! $event.target.closest('button, a')) {{ $viewCall }}">
@@ -41,8 +41,8 @@
                         </td>
                         <td class="table-td">{{ $opname->session_name }}</td>
                         <td class="table-td whitespace-nowrap">{{ Format::date($opname->date) }}</td>
-                        <td class="table-td">{{ Format::number($opname->total_items_scanned) }}</td>
-                        <td class="table-td">{{ Format::signed($diff) }}</td>
+                        <td class="table-td">{{ Format::qty($opname->total_items_scanned) }}</td>
+                        <td class="table-td">{{ Format::signedQty($diff) }}</td>
                         <td class="table-td"><x-ui.badge size="sm" :color="$itemColor">{{ $itemLabel }}</x-ui.badge></td>
                         <td class="table-td"><x-ui.badge size="sm" :color="$statusColor">{{ $statusLabel }}</x-ui.badge></td>
                         <td class="table-td text-end">

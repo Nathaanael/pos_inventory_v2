@@ -38,9 +38,8 @@ class MenuHelper
             ['icon' => 'cube', 'name' => 'Master Barang', 'path' => '/items'],
             ['icon' => 'inbound', 'name' => 'Barang Masuk', 'path' => '/inbounds'],
             ['icon' => 'outbound', 'name' => 'Barang Keluar', 'path' => '/outbounds'],
-            StoreSetting::usesCashCount()
-                ? ['icon' => 'banknotes', 'name' => 'Hitung Kas', 'path' => '/hitung-kas']
-                : (StoreSetting::hasFeature(Feature::StockOpname) ? ['icon' => 'clipboard-check', 'name' => 'Stock Opname', 'path' => '/stock-opnames'] : null),
+            StoreSetting::hasFeature(Feature::StockOpname) ? ['icon' => 'clipboard-check', 'name' => 'Stock Opname', 'path' => '/stock-opnames'] : null,
+            StoreSetting::usesCashCount() ? ['icon' => 'banknotes', 'name' => 'Hitung Kas', 'path' => '/hitung-kas'] : null,
             StoreSetting::usesRecipes() ? ['icon' => 'trash', 'name' => 'Waste / Terbuang', 'path' => '/waste-logs'] : null,
             StoreSetting::hasFeature(Feature::Returns) ? ['icon' => 'arrow-path', 'name' => 'Transaksi Retur', 'path' => '/return-transactions'] : null,
         ]));

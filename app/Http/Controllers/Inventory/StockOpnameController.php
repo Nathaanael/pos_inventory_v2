@@ -102,7 +102,7 @@ class StockOpnameController extends Controller
 
     public function show(StockOpname $stockOpname): View
     {
-        $stockOpname->load(['items.item', 'createdBy']);
+        $stockOpname->load(['items.item.unit', 'createdBy']);
         [$status] = StatusBadge::for('opname', $stockOpname->status);
 
         return view('pages.inventory.partials.detail', [
@@ -111,9 +111,9 @@ class StockOpnameController extends Controller
                 'Nama Sesi' => $stockOpname->session_name,
                 'Tanggal' => Format::date($stockOpname->date),
                 'Status' => $status,
-                'Total Scan' => Format::number($stockOpname->total_items_scanned),
+                'Total Scan' => Format::qty($stockOpname->total_items_scanned),
                 'Cocok' => Format::number($stockOpname->total_match),
-                'Total Selisih' => Format::signed($stockOpname->total_difference),
+                'Total Selisih' => Format::signedQty($stockOpname->total_difference),
                 'Dibuat Oleh' => $stockOpname->createdBy?->name,
             ],
             'notesLabel' => 'Catatan',
@@ -121,9 +121,9 @@ class StockOpnameController extends Controller
             'columns' => ['Barang', 'Stok Sistem', 'Stok Fisik', 'Selisih', 'Status', 'Catatan'],
             'rows' => $stockOpname->items->map(fn ($line) => [
                 $line->item?->name ?? '-',
-                Format::number($line->system_stock),
-                Format::number($line->physical_stock),
-                Format::signed($line->difference),
+                trim(Format::qty($line->system_stock).' '.$line->item?->unit?->name),
+                trim(Format::qty($line->physical_stock).' '.$line->item?->unit?->name),
+                Format::signedQty($line->difference),
                 self::ITEM_STATUS[$line->status] ?? $line->status,
                 $line->notes ?: '-',
             ])->all(),
@@ -144,7 +144,8 @@ class StockOpnameController extends Controller
             'opname' => $opname,
             'code' => $opname->code ?? StockOpname::generateTransactionCode('SO', 'code'),
             'lines' => array_values($lines ?: [['item_id' => '', 'system_stock' => '', 'physical_stock' => '', 'notes' => '']]),
-            'catalog' => ItemCatalog::forForms(),
+            // Hanya barang dengan stok dilacak; stok desimal apa adanya (bahan baku FNB).
+            'catalog' => ItemCatalog::forOpname(),
         ]);
     }
 
@@ -169,8 +170,10 @@ class StockOpnameController extends Controller
             'date' => ['required', 'date'],
             'notes' => ['nullable', 'string'],
             'items' => [$isDraft ? 'nullable' : 'required', 'array'],
-            'items.*.item_id' => ['required', Rule::exists('items', 'id')],
-            'items.*.physical_stock' => ['required', 'integer', 'min:0'],
+            // Menu FNB berbasis resep (track_stock = false) tidak punya stok fisik sendiri.
+            'items.*.item_id' => ['required', Rule::exists('items', 'id')->where('track_stock', true)],
+            // Desimal sampai 4 digit (mis. 1,25 kg); modul retail tetap bisa mengisi bilangan bulat.
+            'items.*.physical_stock' => ['required', 'numeric', 'min:0', 'decimal:0,4'],
             'items.*.notes' => ['nullable', 'string', 'max:255'],
         ], [
             'items.required' => 'Tambahkan minimal satu barang.',
@@ -185,16 +188,16 @@ class StockOpnameController extends Controller
         $stocks = Item::whereIn('id', collect($data['items'] ?? [])->pluck('item_id'))->pluck('current_stock', 'id');
 
         $lines = collect($data['items'] ?? [])->map(function ($row) use ($stocks) {
-            $system = (int) ($stocks[$row['item_id']] ?? 0);
-            $physical = (int) $row['physical_stock'];
-            $diff = $physical - $system;
+            $system = round((float) ($stocks[$row['item_id']] ?? 0), 4);
+            $physical = round((float) $row['physical_stock'], 4);
+            $diff = round($physical - $system, 4); // dibulatkan agar 1,1 - 1,0 tidak jadi 0,10000000000000009
 
             return [
                 'item_id' => (int) $row['item_id'],
                 'system_stock' => $system,
                 'physical_stock' => $physical,
                 'difference' => $diff,
-                'status' => $diff === 0 ? 'cocok' : ($diff > 0 ? 'lebih' : 'kurang'),
+                'status' => $diff == 0 ? 'cocok' : ($diff > 0 ? 'lebih' : 'kurang'),
                 'notes' => $row['notes'] ?? null,
             ];
         })->values();
@@ -205,9 +208,9 @@ class StockOpnameController extends Controller
                 'date' => $data['date'],
                 'notes' => $data['notes'] ?? null,
                 'status' => $isDraft ? 'draft' : 'selesai',
-                'total_items_scanned' => $lines->sum('physical_stock'),
-                'total_match' => $lines->where('difference', 0)->count(),
-                'total_difference' => $lines->sum('difference'),
+                'total_items_scanned' => round($lines->sum('physical_stock'), 4),
+                'total_match' => $lines->filter(fn ($line) => $line['difference'] == 0)->count(),
+                'total_difference' => round($lines->sum('difference'), 4),
             ],
             'lines' => $lines->all(),
         ];

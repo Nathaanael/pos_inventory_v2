@@ -61,13 +61,15 @@
                                     placeholder="Cari barang..." x-on:selected="onItemChange(row)" />
                             </x-common.form.field>
                             <x-common.form.field label="Stok Sistem">
-                                <x-ui.input x-bind:value="row.system_stock" readonly class="bg-gray-50 dark:bg-white/3" />
+                                {{-- Stok desimal ditampilkan "1,25 kg" (bahan baku FNB). --}}
+                                <x-ui.input x-bind:value="row.item_id ? qty(row.system_stock || 0) + unitSuffix(row) : ''" readonly class="bg-gray-50 dark:bg-white/3" />
                             </x-common.form.field>
                             <x-common.form.field label="Stok Fisik" required>
-                                <x-ui.input type="number" min="0" x-bind:name="`items[${index}][physical_stock]`" x-model="row.physical_stock" />
+                                <x-ui.input type="number" min="0" step="any" inputmode="decimal" x-bind:name="`items[${index}][physical_stock]`"
+                                    x-model="row.physical_stock" x-bind:placeholder="unit(row) ? 'dalam ' + unit(row) : '0'" />
                             </x-common.form.field>
                             <x-common.form.field label="Selisih">
-                                <x-ui.input x-bind:value="difference(row) === null ? '' : signed(difference(row))" readonly class="bg-gray-50 dark:bg-white/3" />
+                                <x-ui.input x-bind:value="difference(row) === null ? '' : signedQty(difference(row)) + unitSuffix(row)" readonly class="bg-gray-50 dark:bg-white/3" />
                             </x-common.form.field>
                             <x-common.form.field label="Status">
                                 <div class="flex h-11 items-center">

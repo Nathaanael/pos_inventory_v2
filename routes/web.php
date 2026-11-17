@@ -181,8 +181,8 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::post('/{outbound}/void', 'void')->name('void');
         });
 
-        // Modul FNB memakai Hitung Kas; stock opname barang FNB menyusul di halaman sendiri.
-        Route::controller(StockOpnameController::class)->prefix('stock-opnames')->name('stock-opnames.')->middleware(['feature:stock_opname', 'module:item_opname'])->group(function () {
+        // Dipakai semua modul (FNB juga, untuk barang/bahan baku); FNB memakai tampilan default via ModuleView.
+        Route::controller(StockOpnameController::class)->prefix('stock-opnames')->name('stock-opnames.')->middleware('feature:stock_opname')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('/create', 'create')->name('create');
             Route::post('/', 'store')->name('store');

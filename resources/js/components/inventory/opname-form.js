@@ -1,4 +1,4 @@
-import { indexCatalog, number, signed } from './format';
+import { indexCatalog, number, qty, signed, signedQty } from './format';
 
 /**
  * Form Stock Opname: stok sistem terisi saat barang dipilih,
@@ -15,6 +15,18 @@ export default ({ catalog = [], rows = [] } = {}) => ({
     })),
     number,
     signed,
+    qty,
+    signedQty,
+
+    /** Nama satuan barang di baris (mis. "kg"), kosong bila belum memilih barang. */
+    unit(row) {
+        return this.items[row.item_id]?.unit ?? '';
+    },
+
+    unitSuffix(row) {
+        const unit = this.unit(row);
+        return unit ? ` ${unit}` : '';
+    },
 
     get itemOptions() {
         return this.catalog.map((item) => ({ value: String(item.id), label: item.name, description: item.code }));
@@ -29,7 +41,9 @@ export default ({ catalog = [], rows = [] } = {}) => ({
     },
 
     difference(row) {
-        return this.hasPhysical(row) ? Number(row.physical_stock) - Number(row.system_stock || 0) : null;
+        if (!this.hasPhysical(row)) return null;
+        // Dibulatkan 4 desimal (sama seperti server) agar 1,1 - 1,0 tidak jadi 0,10000000000000009.
+        return Math.round((Number(row.physical_stock) - Number(row.system_stock || 0)) * 10000) / 10000;
     },
 
     status(row) {

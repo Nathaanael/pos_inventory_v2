@@ -40,11 +40,11 @@ function cashCountStore(BusinessType $business = BusinessType::Makanan, float $t
     return compact('admin', 'kasir', 'shift');
 }
 
-it('hanya tersedia di modul FNB dan menggantikan stock opname barang', function () {
+it('hanya tersedia di modul FNB, berdampingan dengan stock opname barang', function () {
     ['admin' => $admin] = cashCountStore();
 
     $this->actingAs($admin)->get(route('cash-counts.index'))->assertOk()->assertSee('Kasir Kas');
-    $this->actingAs($admin)->get(route('stock-opnames.index'))->assertNotFound();
+    $this->actingAs($admin)->get(route('stock-opnames.index'))->assertOk();
 });
 
 it('tidak tersedia di modul selain FNB', function () {

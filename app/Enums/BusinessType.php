@@ -111,8 +111,8 @@ enum BusinessType: string
     }
 
     /**
-     * Modul memakai Hitung Kas (uang fisik vs sistem per shift kasir) sebagai pengganti
-     * Stock Opname barang? Stock opname barang FNB akan punya halaman sendiri nanti.
+     * Modul memakai Hitung Kas (uang fisik vs sistem per shift kasir)?
+     * Stock Opname barang tetap tersedia untuk semua modul (FNB: barang & bahan baku).
      */
     public function usesCashCount(): bool
     {
