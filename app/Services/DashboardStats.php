@@ -8,6 +8,7 @@ use App\Models\Outbound;
 use App\Models\OutboundItem;
 use App\Models\ReturnItem;
 use App\Models\ReturnTransaction;
+use App\Models\WasteLog;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -51,6 +52,57 @@ class DashboardStats
             'year' => Carbon::now()->startOfYear(),
             default => Carbon::now()->subDays(29)->startOfDay(),
         };
+    }
+
+    /**
+     * Analitik khusus modul F&B: Food Cost %, Waste Total, Penjualan per Order Type, dan Top Menu.
+     *
+     * @return array<string, mixed>
+     */
+    public function fnbAnalytics(): array
+    {
+        $start = $this->startDate();
+
+        $netSales = (float) Outbound::where('status', 'selesai')
+            ->where('created_at', '>=', $start)
+            ->selectRaw('COALESCE(SUM(total_amount - COALESCE(discount_amount, 0)), 0) as net')
+            ->value('net');
+
+        $totalCogs = (float) Outbound::where('status', 'selesai')
+            ->where('created_at', '>=', $start)
+            ->sum('total_cogs');
+
+        $wasteTotal = (float) WasteLog::where('wasted_at', '>=', $start)->sum('total_cost');
+        $foodCostPct = $netSales > 0 ? round((($totalCogs + $wasteTotal) / $netSales) * 100, 2) : 0.0;
+
+        $byOrderType = Outbound::where('status', 'selesai')
+            ->where('created_at', '>=', $start)
+            ->whereNotNull('order_type')
+            ->selectRaw('order_type, COUNT(*) as count, SUM(COALESCE(grand_total, total_amount)) as total')
+            ->groupBy('order_type')
+            ->get()
+            ->mapWithKeys(fn ($r) => [$r->order_type->value ?? (string) $r->order_type => ['count' => (int) $r->count, 'total' => (float) $r->total]])
+            ->all();
+
+        $topMenus = OutboundItem::join('outbounds', 'outbound_items.outbound_id', '=', 'outbounds.id')
+            ->join('items', 'outbound_items.item_id', '=', 'items.id')
+            ->where('outbounds.status', 'selesai')
+            ->where('outbounds.created_at', '>=', $start)
+            ->groupBy('items.id', 'items.name')
+            ->selectRaw('items.id, items.name, SUM(outbound_items.quantity) as qty, SUM(outbound_items.subtotal) as revenue, SUM(outbound_items.profit) as profit')
+            ->orderByDesc('qty')
+            ->limit(10)
+            ->get()
+            ->all();
+
+        return [
+            'net_sales' => $netSales,
+            'total_cogs' => $totalCogs,
+            'waste_total' => $wasteTotal,
+            'food_cost_pct' => $foodCostPct,
+            'sales_by_order_type' => $byOrderType,
+            'top_menus' => $topMenus,
+        ];
     }
 
     /* ---------------------------- StatsOverviewWidget ---------------------------- */

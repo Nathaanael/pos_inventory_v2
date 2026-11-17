@@ -28,6 +28,7 @@ class MenuHelper
             StoreSetting::hasFeature(Feature::Brand) ? ['icon' => 'star', 'name' => 'Merk', 'path' => '/brands'] : null,
             StoreSetting::hasFeature(Feature::DiningTables) ? ['icon' => 'squares', 'name' => 'Master Meja', 'path' => '/meja'] : null,
             StoreSetting::usesTaxes() ? ['icon' => 'percent', 'name' => 'Pajak & Biaya Layanan', 'path' => '/pajak'] : null,
+            StoreSetting::usesModifiers() ? ['icon' => 'tag', 'name' => 'Modifier & Topping', 'path' => '/modifiers'] : null,
         ]));
     }
 
@@ -38,6 +39,7 @@ class MenuHelper
             ['icon' => 'inbound', 'name' => 'Barang Masuk', 'path' => '/inbounds'],
             ['icon' => 'outbound', 'name' => 'Barang Keluar', 'path' => '/outbounds'],
             StoreSetting::hasFeature(Feature::StockOpname) ? ['icon' => 'clipboard-check', 'name' => 'Stock Opname', 'path' => '/stock-opnames'] : null,
+            StoreSetting::usesRecipes() ? ['icon' => 'trash', 'name' => 'Waste / Terbuang', 'path' => '/waste-logs'] : null,
             StoreSetting::hasFeature(Feature::Returns) ? ['icon' => 'arrow-path', 'name' => 'Transaksi Retur', 'path' => '/return-transactions'] : null,
         ]));
     }

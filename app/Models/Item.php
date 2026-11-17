@@ -9,7 +9,28 @@ class Item extends Model
 {
     use SoftDeletes;
 
+    public const TYPE_RETAIL = 'retail';
+    public const TYPE_MENU = 'menu';
+    public const TYPE_INGREDIENT = 'ingredient';
+    public const TYPE_SEMI_FINISHED = 'semi_finished';
+
+    public const TYPES = [
+        self::TYPE_MENU => 'Menu Jadi (Dijual di Kasir)',
+        self::TYPE_INGREDIENT => 'Bahan Baku (Dapur / Tidak Dijual)',
+        self::TYPE_RETAIL => 'Barang Jual Langsung',
+    ];
+
     protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return [
+            'current_stock' => 'float',
+            'min_stock' => 'float',
+            'track_stock' => 'boolean',
+            'is_active' => 'boolean',
+        ];
+    }
 
     public function brand()
     {
@@ -63,6 +84,86 @@ class Item extends Model
         return $this->hasMany(ItemPrice::class);
     }
 
+    public function modifierGroups()
+    {
+        return $this->belongsToMany(ModifierGroup::class, 'item_modifier_group')
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
+    public function recipe()
+    {
+        return $this->hasOne(Recipe::class, 'menu_item_id');
+    }
+
+    public function usedInRecipes()
+    {
+        return $this->hasMany(RecipeIngredient::class, 'ingredient_item_id');
+    }
+
+    public function hasRecipe(): bool
+    {
+        if ($this->relationLoaded('recipe')) {
+            return $this->recipe !== null;
+        }
+
+        return $this->recipe()->exists();
+    }
+
+    /** Menu yang diproduksi on-demand dari resep (stok dipotong dari bahan baku, bukan stok menu). */
+    public function usesRecipeStock(): bool
+    {
+        return ! $this->track_stock && $this->hasRecipe();
+    }
+
+    /** Hitung estimasi porsi tersedia berdasarkan stok bahan baku di resep. */
+    public function availablePortions(): int
+    {
+        if (! $this->usesRecipeStock()) {
+            return (int) floor((float) $this->current_stock);
+        }
+
+        $recipe = $this->relationLoaded('recipe') ? $this->recipe : $this->recipe()->with('ingredients.ingredientItem')->first();
+        if (! $recipe || $recipe->ingredients->isEmpty() || $recipe->yield_qty <= 0) {
+            return 0;
+        }
+
+        $minPortions = null;
+        foreach ($recipe->ingredients as $ing) {
+            $neededPerPortion = $ing->quantityInBaseUnit() / $recipe->yield_qty;
+            if ($neededPerPortion <= 0) {
+                continue;
+            }
+            $stock = (float) ($ing->ingredientItem?->current_stock ?? 0);
+            $portions = (int) floor($stock / $neededPerPortion);
+            $minPortions = $minPortions === null ? $portions : min($minPortions, $portions);
+        }
+
+        return max(0, $minPortions ?? 0);
+    }
+
+    /** Hitung HPP (COGS) per 1 porsi dari total biaya bahan baku di resep. */
+    public function calculateRecipeCogs(): float
+    {
+        if (! $this->hasRecipe()) {
+            return (float) $this->harga_beli;
+        }
+
+        $recipe = $this->relationLoaded('recipe') ? $this->recipe : $this->recipe()->with('ingredients.ingredientItem')->first();
+        if (! $recipe || $recipe->ingredients->isEmpty() || $recipe->yield_qty <= 0) {
+            return (float) $this->harga_beli;
+        }
+
+        $totalCost = 0.0;
+        foreach ($recipe->ingredients as $ing) {
+            $needed = $ing->quantityInBaseUnit() / $recipe->yield_qty;
+            $unitCost = (float) ($ing->ingredientItem?->harga_beli ?? 0);
+            $totalCost += $needed * $unitCost;
+        }
+
+        return round($totalCost, 2);
+    }
+
     public function stockMovements()
     {
         return $this->hasMany(StockMovement::class);
@@ -104,8 +205,12 @@ class Item extends Model
     /**
      * Calculate average COGS based on FIFO logic from item_supplier stocks.
      */
-    public function calculateFifoCogs(int $quantity): float
+    public function calculateFifoCogs(float|int $quantity): float
     {
+        if ($this->usesRecipeStock()) {
+            return $this->calculateRecipeCogs();
+        }
+
         if ($quantity <= 0) {
             return 0;
         }

@@ -10,6 +10,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE stock_movements MODIFY COLUMN type ENUM('inbound', 'outbound', 'return_in', 'return_out', 'adjustment', 'initial', 'void') NOT NULL");
     }
 

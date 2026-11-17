@@ -10,8 +10,11 @@ use App\Http\Controllers\Inventory\InboundController;
 use App\Http\Controllers\Inventory\OutboundController;
 use App\Http\Controllers\Inventory\ReturnTransactionController;
 use App\Http\Controllers\Inventory\StockOpnameController;
+use App\Http\Controllers\Inventory\WasteLogController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\Kasir\KasirController;
+use App\Http\Controllers\Kasir\KdsController;
+use App\Http\Controllers\Kasir\ShiftController;
 use App\Http\Controllers\Master\BrandController;
 use App\Http\Controllers\Master\CategoryController;
 use App\Http\Controllers\Master\DiningTableController;
@@ -47,12 +50,31 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
         Route::redirect('/', '/kasir/pos')->name('home');
         Route::get('/pos', 'pos')->name('pos');
         Route::post('/pos/checkout', 'checkout')->name('checkout');
+        Route::post('/orders/{outbound}/add-items', 'addOrderItems')->name('orders.add-items');
+        Route::post('/orders/{outbound}/pay', 'payOrder')->name('orders.pay');
+        Route::post('/orders/{outbound}/void-item/{outboundItem}', 'voidOrderItem')->name('orders.void-item');
+        Route::post('/orders/{outbound}/print-kot', 'printKot')->name('orders.print-kot');
         Route::get('/meja', 'meja')->name('meja')->middleware('feature:meja');
         Route::get('/meja/data', 'mejaData')->name('meja.data')->middleware('feature:meja');
         Route::post('/meja/{table}/release', 'release')->name('meja.release')->middleware('feature:meja');
+        Route::post('/meja/{table}/move', 'moveTable')->name('meja.move')->middleware('feature:meja');
         Route::get('/riwayat', 'riwayat')->name('riwayat');
         Route::post('/riwayat/{outbound}/print-thermal', 'printThermal')->name('print-thermal');
         Route::get('/belum-siap', 'notReady')->name('belum-siap');
+    });
+
+    Route::controller(ShiftController::class)->prefix('kasir/shift')->name('kasir.shift.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/open', 'open')->name('open');
+        Route::post('/cash-movement', 'storeCashMovement')->name('cash-movement');
+        Route::post('/close', 'close')->name('close');
+        Route::post('/{shift}/print-report', 'printReport')->name('print-report');
+    });
+
+    Route::controller(KdsController::class)->prefix('kasir/kds')->name('kasir.kds.')->middleware('module:modifiers')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/data', 'data')->name('data');
+        Route::post('/items/{outboundItem}/status', 'updateItemStatus')->name('item-status');
     });
 
     // ------------------------------------------------------- Panel admin
@@ -114,6 +136,15 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::delete('/{tax}', 'destroy')->name('destroy');
         });
 
+        // Modifier & Topping (modul FNB)
+        Route::controller(\App\Http\Controllers\Master\ModifierGroupController::class)->prefix('modifiers')->name('modifiers.')->middleware('module:modifiers')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('/{modifierGroup}', 'update')->name('update');
+            Route::patch('/{modifierGroup}/toggle', 'toggle')->name('toggle');
+            Route::delete('/{modifierGroup}', 'destroy')->name('destroy');
+        });
+
         // Inventaris
         Route::controller(ItemController::class)->prefix('items')->name('items.')->group(function () {
             Route::get('/', 'index')->name('index');
@@ -156,6 +187,11 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::get('/{stockOpname}/edit', 'edit')->name('edit');
             Route::put('/{stockOpname}', 'update')->name('update');
             Route::get('/{stockOpname}/detail', 'show')->name('show');
+        });
+
+        Route::controller(WasteLogController::class)->prefix('waste-logs')->name('waste-logs.')->middleware('module:recipes')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
         });
 
         Route::controller(ReturnTransactionController::class)->prefix('return-transactions')->name('return-transactions.')->middleware('feature:retur')->group(function () {

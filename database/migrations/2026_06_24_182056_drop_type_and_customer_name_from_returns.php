@@ -12,6 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('returns', function (Blueprint $table) {
+            if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+                $table->dropIndex('idx_returns_type');
+            }
             $table->dropColumn(['type', 'customer_name']);
         });
     }

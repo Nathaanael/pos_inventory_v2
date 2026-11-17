@@ -102,6 +102,18 @@ class StoreSetting extends Model
         return static::current()->business_type?->usesTaxes() ?? false;
     }
 
+    /** Modul aktif memakai Modifier & Open Bill FNB? */
+    public static function usesModifiers(): bool
+    {
+        return static::current()->business_type?->usesModifiers() ?? false;
+    }
+
+    /** Modul aktif memakai Resep / BOM & Bahan Baku? */
+    public static function usesRecipes(): bool
+    {
+        return static::current()->business_type?->usesRecipes() ?? false;
+    }
+
     /**
      * Terapkan modul jenis usaha: simpan jenis usaha & aktifkan tepat fitur bawaan modulnya.
      * Dipakai wizard setup (satu-satunya tempat jenis usaha bisa diganti).

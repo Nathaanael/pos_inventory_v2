@@ -8,6 +8,12 @@
 @endphp
 
 @section('content')
+    @if (! $activeShift)
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+            <span>Shift kasir belum dibuka. Buka shift terlebih dahulu agar transaksi tercatat dalam laporan laci kas (X/Z-Report).</span>
+            <a href="{{ route('kasir.shift.index') }}" class="rounded-lg bg-warning-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-warning-600">Buka Shift</a>
+        </div>
+    @endif
     <div x-data="kasirPos({
             catalog: @js($catalog),
             categories: @js($categories),
@@ -15,7 +21,11 @@
             fnb: @js($fnb),
             tables: @js($tables),
             preselectTable: @js($preselectTable),
+            activeOrder: @js($activeOrder),
+            usesModifiers: @js($usesModifiers),
             checkoutUrl: @js(route('kasir.checkout')),
+            addItemsUrlTemplate: @js(route('kasir.orders.add-items', '__ID__')),
+            mejaUrl: @js(route('kasir.meja')),
             taxRules: @js($taxRules),
         })"
         x-on:keydown.window="shortcut($event)"
@@ -171,24 +181,43 @@
 
             {{-- Daftar pesanan --}}
             <div class="custom-scrollbar min-h-32 flex-1 overflow-y-auto px-5 py-3">
-                <template x-for="(line, index) in lines" :key="line.id">
+                <template x-if="activeOrder">
+                    <div class="mb-3 flex items-center justify-between rounded-xl border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-xs text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+                        <div>
+                            <p class="font-semibold" x-text="'Tambah ke Open Bill ' + activeOrder.code"></p>
+                            <p x-text="(activeOrder.table_label || '') + (activeOrder.customer_name ? ' · ' + activeOrder.customer_name : '')"></p>
+                        </div>
+                        <a href="{{ route('kasir.pos') }}" class="font-medium underline">Batal</a>
+                    </div>
+                </template>
+                <template x-for="(line, index) in lines" :key="line.uid">
                     <div class="flex items-start gap-3 border-b border-dashed border-gray-100 py-3 last:border-0 dark:border-gray-800">
                         <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600 dark:bg-white/5 dark:text-gray-400" x-text="index + 1"></span>
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                                 <span x-text="line.item.name"></span>
-                                <small class="text-gray-500 dark:text-gray-400" x-text="' · ' + money(price(line.item))"></small>
+                                <small class="text-gray-500 dark:text-gray-400" x-text="' · ' + money(lineUnitPrice(line))"></small>
                             </p>
-                            <div class="mt-1.5 flex w-fit items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                                <button type="button" class="flex size-7 items-center justify-center bg-gray-50 text-gray-600 dark:bg-white/5 dark:text-gray-400" x-on:click="dec(line.id)" aria-label="Kurangi">−</button>
-                                <input type="number" min="1" x-bind:max="line.item.stock" x-bind:value="line.qty" x-on:change="setQty(line.id, $event.target.value)" aria-label="Jumlah"
-                                    class="h-7 w-12 border-x border-gray-200 bg-white text-center text-sm text-gray-800 outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
-                                <button type="button" class="flex size-7 items-center justify-center bg-gray-50 text-gray-600 dark:bg-white/5 dark:text-gray-400" x-on:click="add(line.item)" aria-label="Tambah">+</button>
+                            <template x-if="line.modifiers?.length">
+                                <p class="mt-0.5 text-xs text-brand-600 dark:text-brand-400" x-text="'+ ' + line.modifiers.map((m) => m.name + (m.price_delta > 0 ? ' (+' + money(m.price_delta) + ')' : '')).join(', ')"></p>
+                            </template>
+                            <template x-if="line.notes">
+                                <p class="mt-0.5 text-xs italic text-gray-500 dark:text-gray-400" x-text="'Catatan: ' + line.notes"></p>
+                            </template>
+                            <div class="mt-1.5 flex items-center gap-2">
+                                <div class="flex w-fit items-center overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <button type="button" class="flex size-7 items-center justify-center bg-gray-50 text-gray-600 dark:bg-white/5 dark:text-gray-400" x-on:click="dec(line.uid)" aria-label="Kurangi">−</button>
+                                    <input type="number" min="1" x-bind:max="line.item.stock" x-bind:value="line.qty" x-on:change="setQty(line.uid, $event.target.value)" aria-label="Jumlah"
+                                        class="h-7 w-12 border-x border-gray-200 bg-white text-center text-sm text-gray-800 outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90" />
+                                    <button type="button" class="flex size-7 items-center justify-center bg-gray-50 text-gray-600 dark:bg-white/5 dark:text-gray-400" x-on:click="addConfiguredLine(line.item, 1, line.modifier_ids, line.notes)" aria-label="Tambah">+</button>
+                                </div>
+                                <button x-show="usesModifiers" type="button" x-on:click="openModifierModal(line.item, line)"
+                                    class="text-xs text-gray-500 hover:text-brand-500 dark:text-gray-400">Opsi/Catatan</button>
                             </div>
                         </div>
                         <div class="text-end">
-                            <p class="text-sm font-semibold whitespace-nowrap text-gray-800 dark:text-white/90" x-text="money(price(line.item) * line.qty)"></p>
-                            <button type="button" class="mt-1 text-xs text-error-500 hover:underline" x-on:click="remove(line.id)">Hapus</button>
+                            <p class="text-sm font-semibold whitespace-nowrap text-gray-800 dark:text-white/90" x-text="money(lineUnitPrice(line) * line.qty)"></p>
+                            <button type="button" class="mt-1 text-xs text-error-500 hover:underline" x-on:click="remove(line.uid)">Hapus</button>
                         </div>
                     </div>
                 </template>
@@ -213,6 +242,10 @@
                         <span x-text="'Subtotal (' + totalQty + ' barang)'"></span>
                         <span x-text="money(subtotal)"></span>
                     </div>
+                    <div x-show="discountAmount > 0" class="flex justify-between text-sm text-error-500">
+                        <span x-text="'Diskon' + (discountType === 'percent' ? ' (' + discountValue + '%)' : '')"></span>
+                        <span x-text="'-' + money(discountAmount)"></span>
+                    </div>
                     {{-- Pajak & biaya layanan (modul FNB). Inclusive hanya keterangan, tidak menambah total. --}}
                     <template x-for="d in taxes.details" :key="d.name + d.rate + d.method">
                         <div class="flex justify-between text-sm text-gray-500 dark:text-gray-400">
@@ -226,7 +259,7 @@
                     </div>
                 </div>
 
-                <div>
+                <div x-show="!activeOrder">
                     <p class="mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400">Metode Pembayaran</p>
                     <div class="flex gap-1 rounded-xl bg-gray-200/60 p-1 dark:bg-white/5">
                         @foreach (\App\Models\Outbound::PAYMENT_METHODS as $key => $label)
@@ -253,19 +286,85 @@
                     </div>
                 </div>
 
-                <div>
+                <div class="flex flex-wrap items-center gap-4">
                     <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400" x-on:click="showNotes = !showNotes"
                         x-text="showNotes ? '− Sembunyikan catatan' : '+ Tambah catatan'"></button>
-                    <x-ui.textarea x-show="showNotes" x-model="notes" rows="2" maxlength="500" placeholder="Catatan transaksi" class="mt-2 min-h-16" />
+                    <button x-show="!activeOrder" type="button" class="text-xs text-brand-600 hover:underline dark:text-brand-400" x-on:click="showDiscount = !showDiscount"
+                        x-text="showDiscount ? '− Tutup diskon' : '+ Tambah diskon'"></button>
                 </div>
+                <div x-show="showDiscount && !activeOrder" class="flex items-center gap-2">
+                    <select x-model="discountType" class="h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                        <option value="percent">Persen (%)</option>
+                        <option value="fixed">Nominal (Rp)</option>
+                    </select>
+                    <x-ui.input type="number" x-model="discountValue" min="0" placeholder="Nilai diskon" class="h-10 flex-1" />
+                </div>
+                <x-ui.textarea x-show="showNotes" x-model="notes" rows="2" maxlength="500" placeholder="Catatan transaksi" class="min-h-16" />
 
-                <x-ui.button size="lg" class="h-12 w-full text-base" x-bind:disabled="!canSubmit" x-on:click="submit()">
-                    <span x-text="saving ? 'Menyimpan…' : 'Simpan Transaksi'"></span>
-                </x-ui.button>
-                <p x-show="needsTable && cart.length && !selectedTable" class="-mt-2 text-center text-xs text-error-500">Pilih meja dulu · tekan Simpan untuk membuka daftar meja</p>
+                <template x-if="activeOrder">
+                    <x-ui.button size="lg" class="h-12 w-full text-base" x-bind:disabled="saving || !cart.length" x-on:click="submitAddItems()">
+                        <span x-text="saving ? 'Menyimpan…' : 'Tambahkan ke Open Bill'"></span>
+                    </x-ui.button>
+                </template>
+                <template x-if="!activeOrder">
+                    <div class="flex gap-2">
+                        <x-ui.button x-show="usesModifiers" type="button" variant="outline" size="lg" class="h-12 flex-1 text-sm"
+                            x-bind:disabled="!canSaveOpenBill" x-on:click="submit(true)">
+                            <span>Simpan Open Bill</span>
+                        </x-ui.button>
+                        <x-ui.button size="lg" class="h-12 flex-1 text-base" x-bind:disabled="!canSubmit" x-on:click="submit(false)">
+                            <span x-text="saving ? 'Menyimpan…' : 'Bayar & Simpan'"></span>
+                        </x-ui.button>
+                    </div>
+                </template>
+                <p x-show="!activeOrder && needsTable && cart.length && !selectedTable" class="-mt-2 text-center text-xs text-error-500">Pilih meja dulu · tekan Simpan untuk membuka daftar meja</p>
                 <p class="-mt-2 text-center text-xs text-gray-400">Ctrl+Enter untuk simpan</p>
             </div>
         </div>
+
+        {{-- ================= Modal Modifier & Catatan Menu ================= --}}
+        <x-common.modal show="modModal.open" max-width="lg" title="Opsi & Catatan Menu">
+            <div x-show="modModal.item" class="space-y-5">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
+                    <div>
+                        <h4 class="font-semibold text-gray-800 dark:text-white/90" x-text="modModal.item?.name"></h4>
+                        <p class="text-xs text-gray-500 dark:text-gray-400" x-text="modModal.item ? money(price(modModal.item)) : ''"></p>
+                    </div>
+                </div>
+
+                <template x-for="group in (modModal.item?.modifier_groups ?? [])" :key="group.id">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-gray-800 dark:text-white/90" x-text="group.name"></span>
+                            <span class="text-xs text-gray-500 dark:text-gray-400"
+                                x-text="(group.is_required ? 'Wajib · ' : 'Opsional · ') + (group.max_select === 1 ? 'Pilih 1' : 'Maks ' + group.max_select)"></span>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <template x-for="mod in group.modifiers" :key="mod.id">
+                                <button type="button" x-on:click="toggleMod(group, mod)"
+                                    class="flex items-center justify-between rounded-xl border-2 px-3 py-2 text-start text-sm transition"
+                                    x-bind:class="isModSelected(mod.id)
+                                        ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                                        : 'border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-800 dark:text-gray-300'">
+                                    <span x-text="mod.name"></span>
+                                    <span class="text-xs font-medium" x-text="mod.price_delta > 0 ? '+' + money(mod.price_delta) : 'Gratis'"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Catatan Dapur (Opsional)</label>
+                    <x-ui.input type="text" x-model="modModal.notes" maxlength="255" placeholder="mis. Tidak pedas, es terpisah" />
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <x-ui.button type="button" variant="outline" x-on:click="modModal.open = false">Batal</x-ui.button>
+                    <x-ui.button type="button" x-on:click="confirmModifierModal()">Simpan ke Keranjang</x-ui.button>
+                </div>
+            </div>
+        </x-common.modal>
 
         {{-- ================= Pemilih meja ================= --}}
         <x-common.modal show="tablePickerOpen" max-width="4xl" title="Pilih Meja">

@@ -7,6 +7,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE inbounds MODIFY COLUMN status ENUM('pending', 'diterima', 'dibatalkan', 'voided') DEFAULT 'diterima'");
         DB::statement("ALTER TABLE outbounds MODIFY COLUMN status ENUM('pending', 'selesai', 'dibatalkan', 'voided') DEFAULT 'selesai'");
     }

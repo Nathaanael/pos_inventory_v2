@@ -7,6 +7,7 @@ enum TransactionStatus: string
     case PENDING = 'pending';
     case RECEIVED = 'diterima';
     case COMPLETED = 'selesai';
+    case OPEN = 'open';
     case CANCELLED = 'dibatalkan';
     case VOIDED = 'voided';
     case DRAFT = 'draft';

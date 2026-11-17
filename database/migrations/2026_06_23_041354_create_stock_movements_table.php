@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('stock_movements', function (Blueprint $table) {
             $table->id();
             $table->foreignId('item_id')->constrained();
-            $table->enum('type', ['inbound', 'outbound', 'return_in', 'return_out', 'adjustment', 'initial']);
+            $table->enum('type', ['inbound', 'outbound', 'return_in', 'return_out', 'adjustment', 'initial', 'void', 'waste']);
             $table->unsignedBigInteger('reference_id')->nullable();
             $table->string('reference_type', 50)->nullable();
             $table->integer('quantity');

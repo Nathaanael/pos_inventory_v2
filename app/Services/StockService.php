@@ -3,15 +3,19 @@
 namespace App\Services;
 
 use App\Enums\MovementType;
+use App\Enums\PaymentStatus;
 use App\Enums\TransactionStatus;
+use App\Models\CashierShift;
 use App\Models\Inbound;
 use App\Models\InboundItem;
 use App\Models\Item;
 use App\Models\ItemSupplier;
 use App\Models\Outbound;
 use App\Models\OutboundItem;
+use App\Models\OutboundPayment;
 use App\Models\ReturnTransaction;
 use App\Models\StockMovement;
+use App\Models\WasteLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -111,18 +115,26 @@ class StockService
      *
      * @throws ValidationException jika stok salah satu barang tidak cukup (tidak ada yang tersimpan).
      */
-    public function createOutbound(array $header, array $lines): Outbound
+    public function createOutbound(array $header, array $lines, bool $isOpenBill = false): Outbound
     {
-        return DB::transaction(function () use ($header, $lines) {
+        return DB::transaction(function () use ($header, $lines, $isOpenBill) {
+            $activeShiftId = $header['cashier_shift_id'] ?? CashierShift::activeFor(auth()->id())?->id;
+
             $outbound = Outbound::create([
                 ...$header,
                 'status' => TransactionStatus::PENDING,
+                'payment_status' => $isOpenBill ? PaymentStatus::UNPAID : PaymentStatus::PAID,
+                'paid_at' => $isOpenBill ? null : ($header['paid_at'] ?? now()),
                 'created_by' => auth()->id(),
+                'cashier_shift_id' => $activeShiftId,
                 'total_amount' => collect($lines)->sum('subtotal'),
                 'total_cogs' => collect($lines)->sum(fn ($l) => $l['cogs_price'] * $l['quantity']),
             ]);
 
             foreach ($lines as $line) {
+                $modifiersTotal = (float) ($line['modifiers_total'] ?? 0);
+                $unitSell = (float) $line['sell_price'] + $modifiersTotal;
+
                 OutboundItem::create([
                     'outbound_id' => $outbound->id,
                     'item_id' => $line['item_id'],
@@ -130,41 +142,195 @@ class StockService
                     'sell_price' => $line['sell_price'],
                     'cogs_price' => $line['cogs_price'],
                     'subtotal' => $line['subtotal'],
-                    'profit' => ($line['sell_price'] - $line['cogs_price']) * $line['quantity'],
+                    'profit' => ($unitSell - (float) $line['cogs_price']) * $line['quantity'],
+                    'modifiers_snapshot' => $line['modifiers_snapshot'] ?? null,
+                    'modifiers_total' => $modifiersTotal,
+                    'notes' => $line['notes'] ?? null,
                 ]);
             }
 
-            $this->completeOutbound($outbound->load('items'), 'Barang Keluar');
+            $targetStatus = $isOpenBill ? TransactionStatus::OPEN : TransactionStatus::COMPLETED;
+            $this->completeOutbound($outbound->load('items'), $isOpenBill ? 'Open Bill (Pesanan Meja)' : 'Barang Keluar', $targetStatus);
+
+            if (! $isOpenBill && ! empty($header['payment_method'])) {
+                OutboundPayment::create([
+                    'outbound_id' => $outbound->id,
+                    'cashier_shift_id' => $activeShiftId,
+                    'payment_method' => $header['payment_method'],
+                    'amount' => $outbound->payableTotal(),
+                    'paid_at' => now(),
+                    'created_by' => auth()->id(),
+                ]);
+            }
 
             return $outbound->refresh();
         });
     }
 
     /**
-     * Status jadi "selesai" dan stok berkurang (FIFO per supplier).
+     * Tambahkan item baru ke Open Bill yang sudah ada, potong stok untuk item baru,
+     * dan hitung ulang total + pajak.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    public function addItemsToOutbound(Outbound $outbound, array $lines): Outbound
+    {
+        return DB::transaction(function () use ($outbound, $lines) {
+            $outbound = Outbound::lockForUpdate()->findOrFail($outbound->id);
+
+            if ($outbound->status !== TransactionStatus::OPEN) {
+                throw ValidationException::withMessages([
+                    'order' => 'Hanya pesanan Open Bill yang bisa ditambah item.',
+                ]);
+            }
+
+            $createdLines = [];
+            foreach ($lines as $line) {
+                $item = $this->lockItem($line['item_id']);
+                $this->ensureSufficientStock($item, (float) $line['quantity']);
+
+                $modifiersTotal = (float) ($line['modifiers_total'] ?? 0);
+                $unitSell = (float) $line['sell_price'] + $modifiersTotal;
+
+                $created = OutboundItem::create([
+                    'outbound_id' => $outbound->id,
+                    'item_id' => $line['item_id'],
+                    'quantity' => $line['quantity'],
+                    'sell_price' => $line['sell_price'],
+                    'cogs_price' => $line['cogs_price'],
+                    'subtotal' => $line['subtotal'],
+                    'profit' => ($unitSell - (float) $line['cogs_price']) * $line['quantity'],
+                    'modifiers_snapshot' => $line['modifiers_snapshot'] ?? null,
+                    'modifiers_total' => $modifiersTotal,
+                    'notes' => $line['notes'] ?? null,
+                ]);
+
+                $this->deductSaleItemStock($item, (float) $line['quantity'], $outbound->id, $unitSell, 'Tambah Pesanan Open Bill');
+                $createdLines[] = $created;
+            }
+
+            $this->recalculateOutboundTotals($outbound);
+
+            return $outbound->refresh();
+        });
+    }
+
+    /**
+     * Batalkan satu baris item dari Open Bill dan kembalikan stoknya.
+     */
+    public function voidOutboundItem(Outbound $outbound, OutboundItem $line, string $reason): Outbound
+    {
+        return DB::transaction(function () use ($outbound, $line, $reason) {
+            $outbound = Outbound::lockForUpdate()->findOrFail($outbound->id);
+
+            if ($outbound->status !== TransactionStatus::OPEN) {
+                throw ValidationException::withMessages([
+                    'order' => 'Hanya item pada Open Bill yang bisa dibatalkan per baris.',
+                ]);
+            }
+
+            if ((int) $line->outbound_id !== (int) $outbound->id) {
+                abort(404);
+            }
+
+            $item = $this->lockItem($line->item_id);
+            $this->restoreSaleItemStock($item, (float) $line->quantity, $outbound->id, (float) $line->sell_price, 'Batal Item Open Bill: '.$reason);
+
+            $line->delete();
+            $this->recalculateOutboundTotals($outbound);
+
+            return $outbound->refresh();
+        });
+    }
+
+    /**
+     * Bayar Open Bill (mendukung pembayaran tunggal maupun split payment).
+     *
+     * @param  array<int, array{payment_method: string, amount: float, notes?: ?string}>  $payments
+     */
+    public function payOutbound(Outbound $outbound, array $payments, ?float $cashReceived = null): Outbound
+    {
+        return DB::transaction(function () use ($outbound, $payments, $cashReceived) {
+            $outbound = Outbound::lockForUpdate()->findOrFail($outbound->id);
+
+            if ($outbound->status !== TransactionStatus::OPEN) {
+                throw ValidationException::withMessages([
+                    'order' => 'Pesanan ini sudah dibayar atau dibatalkan.',
+                ]);
+            }
+
+            $activeShiftId = CashierShift::activeFor(auth()->id())?->id;
+
+            foreach ($payments as $p) {
+                OutboundPayment::create([
+                    'outbound_id' => $outbound->id,
+                    'cashier_shift_id' => $activeShiftId,
+                    'payment_method' => $p['payment_method'],
+                    'amount' => $p['amount'],
+                    'paid_at' => now(),
+                    'created_by' => auth()->id(),
+                    'notes' => $p['notes'] ?? null,
+                ]);
+            }
+
+            $paidTotal = (float) $outbound->payments()->sum('amount');
+            $payable = $outbound->payableTotal();
+            $isFullyPaid = $paidTotal + 0.01 >= $payable;
+
+            $methods = $outbound->payments()->pluck('payment_method')->unique()->values();
+            $summaryMethod = $methods->count() > 1 ? 'split' : ($methods->first() ?? $outbound->payment_method);
+
+            $outbound->update([
+                'payment_method' => $summaryMethod,
+                'paid_amount' => $cashReceived !== null && $cashReceived >= $paidTotal ? $cashReceived : $paidTotal,
+                'payment_status' => $isFullyPaid ? PaymentStatus::PAID : PaymentStatus::PARTIAL,
+                'status' => $isFullyPaid ? TransactionStatus::COMPLETED : TransactionStatus::OPEN,
+                'paid_at' => $isFullyPaid ? now() : null,
+            ]);
+
+            return $outbound->refresh();
+        });
+    }
+
+    private function recalculateOutboundTotals(Outbound $outbound): void
+    {
+        $outbound->load('items.item');
+        $taxLines = $outbound->items->map(fn (OutboundItem $l) => [
+            'subtotal' => (float) $l->subtotal,
+            'tax_rate' => $l->item?->tax_rate !== null ? (float) $l->item->tax_rate : null,
+            'tax_method' => $l->item?->tax_method,
+        ])->all();
+
+        $taxes = app(TaxCalculator::class)->calculate($taxLines, $outbound->order_type?->value, null, (float) ($outbound->discount_amount ?? 0));
+
+        $outbound->update([
+            'total_amount' => $taxes['subtotal'],
+            'total_cogs' => $outbound->items->sum(fn (OutboundItem $l) => (float) $l->cogs_price * $l->quantity),
+            'service_amount' => $taxes['service_amount'],
+            'tax_amount' => $taxes['tax_amount'],
+            'grand_total' => $taxes['grand_total'],
+            'tax_details' => $taxes['details'] ?: null,
+        ]);
+    }
+
+    /**
+     * Status jadi "selesai" (atau "open" untuk Open Bill) dan stok berkurang (FIFO per supplier).
      * Harus dipanggil di dalam DB::transaction.
      */
-    private function completeOutbound(Outbound $outbound, string $notes): void
+    private function completeOutbound(Outbound $outbound, string $notes, TransactionStatus $targetStatus = TransactionStatus::COMPLETED): void
     {
         // Cek semua stok dulu, supaya transaksi tidak setengah jadi.
         foreach ($outbound->items as $line) {
             $item = $this->lockItem($line->item_id);
-
-            if ($item->current_stock < $line->quantity) {
-                throw ValidationException::withMessages([
-                    'stock' => "Stok {$item->name} tidak cukup. Tersedia: {$item->current_stock}",
-                ]);
-            }
+            $this->ensureSufficientStock($item, (float) $line->quantity);
         }
 
-        $outbound->update(['status' => TransactionStatus::COMPLETED]);
+        $outbound->update(['status' => $targetStatus]);
 
         foreach ($outbound->items as $line) {
             $item = $this->lockItem($line->item_id);
-
-            $this->deductSupplierStockFifo($item, $line->quantity);
-
-            $this->move($item, -$line->quantity, MovementType::OUTBOUND, 'outbounds', $outbound->id, $line->sell_price, $notes);
+            $unitSell = (float) $line->sell_price + (float) ($line->modifiers_total ?? 0);
+            $this->deductSaleItemStock($item, (float) $line->quantity, $outbound->id, $unitSell, $notes);
         }
     }
 
@@ -181,7 +347,7 @@ class StockService
                 return;
             }
 
-            $wasCompleted = $outbound->status === TransactionStatus::COMPLETED;
+            $wasDeducted = in_array($outbound->status, [TransactionStatus::COMPLETED, TransactionStatus::OPEN], true);
 
             $outbound->update([
                 'status' => TransactionStatus::VOIDED,
@@ -190,16 +356,13 @@ class StockService
                 'void_reason' => $reason,
             ]);
 
-            if (! $wasCompleted) {
+            if (! $wasDeducted) {
                 return;
             }
 
             foreach ($outbound->items as $line) {
                 $item = $this->lockItem($line->item_id);
-
-                $this->restoreSupplierStock($item, $line->quantity);
-
-                $this->move($item, $line->quantity, MovementType::VOID, 'outbounds', $outbound->id, $line->sell_price, 'Batal Barang Keluar: ' . $reason);
+                $this->restoreSaleItemStock($item, (float) $line->quantity, $outbound->id, (float) $line->sell_price, 'Batal Barang Keluar: ' . $reason);
             }
         });
     }
@@ -272,16 +435,128 @@ class StockService
     }
 
     /* =====================================================================
+     |  WASTE / SPOILAGE (MODUL F&B)
+     * ===================================================================== */
+
+    /**
+     * Catat bahan baku atau barang rusak/basi/terbuang dan potong stoknya.
+     */
+    public function recordWaste(Item $item, float $quantity, string $reason, ?string $notes = null): WasteLog
+    {
+        return DB::transaction(function () use ($item, $quantity, $reason, $notes) {
+            $locked = $this->lockItem($item->id);
+
+            if ($locked->current_stock + 0.0001 < $quantity) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Stok {$locked->name} tidak cukup. Tersedia: {$locked->current_stock}",
+                ]);
+            }
+
+            $unitCost = (float) $locked->calculateFifoCogs($quantity);
+            $totalCost = round($unitCost * $quantity, 2);
+
+            $waste = WasteLog::create([
+                'item_id' => $locked->id,
+                'quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'total_cost' => $totalCost,
+                'reason' => $reason,
+                'notes' => $notes,
+                'created_by' => auth()->id(),
+                'wasted_at' => now(),
+            ]);
+
+            $this->deductSupplierStockFifo($locked, $quantity);
+            $this->move($locked, -$quantity, MovementType::WASTE, 'waste_logs', $waste->id, $unitCost, 'Waste: '.(WasteLog::REASONS[$reason] ?? $reason));
+
+            return $waste;
+        });
+    }
+
+    /* =====================================================================
      |  INTI: satu-satunya kode yang menulis current_stock & stock_movements
      * ===================================================================== */
+
+    private function ensureSufficientStock(Item $item, float $qty): void
+    {
+        if (! $item->usesRecipeStock()) {
+            if ($item->current_stock + 0.0001 < $qty) {
+                throw ValidationException::withMessages([
+                    'stock' => "Stok {$item->name} tidak cukup. Tersedia: {$item->current_stock}",
+                ]);
+            }
+
+            return;
+        }
+
+        $recipe = $item->recipe()->with('ingredients.ingredientItem')->first();
+        if (! $recipe || $recipe->yield_qty <= 0) {
+            return;
+        }
+
+        foreach ($recipe->ingredients as $ing) {
+            $needed = round(($ing->quantityInBaseUnit() / $recipe->yield_qty) * $qty, 4);
+            $ingredient = $this->lockItem($ing->ingredient_item_id);
+
+            if ($ingredient->current_stock + 0.0001 < $needed) {
+                throw ValidationException::withMessages([
+                    'stock' => "Bahan baku {$ingredient->name} untuk {$item->name} tidak cukup (butuh {$needed}, tersedia {$ingredient->current_stock}).",
+                ]);
+            }
+        }
+    }
+
+    private function deductSaleItemStock(Item $item, float $qty, int $outboundId, float $unitSell, string $notes): void
+    {
+        if (! $item->usesRecipeStock()) {
+            $this->deductSupplierStockFifo($item, $qty);
+            $this->move($item, -$qty, MovementType::OUTBOUND, 'outbounds', $outboundId, $unitSell, $notes);
+
+            return;
+        }
+
+        $recipe = $item->recipe()->with('ingredients.ingredientItem')->first();
+        if (! $recipe || $recipe->yield_qty <= 0) {
+            return;
+        }
+
+        foreach ($recipe->ingredients as $ing) {
+            $needed = round(($ing->quantityInBaseUnit() / $recipe->yield_qty) * $qty, 4);
+            $ingredient = $this->lockItem($ing->ingredient_item_id);
+            $this->deductSupplierStockFifo($ingredient, $needed);
+            $this->move($ingredient, -$needed, MovementType::OUTBOUND, 'outbounds', $outboundId, (float) $ingredient->harga_beli, "Bahan Resep: {$item->name}");
+        }
+    }
+
+    private function restoreSaleItemStock(Item $item, float $qty, int $outboundId, float $unitSell, string $notes): void
+    {
+        if (! $item->usesRecipeStock()) {
+            $this->restoreSupplierStock($item, $qty);
+            $this->move($item, $qty, MovementType::VOID, 'outbounds', $outboundId, $unitSell, $notes);
+
+            return;
+        }
+
+        $recipe = $item->recipe()->with('ingredients.ingredientItem')->first();
+        if (! $recipe || $recipe->yield_qty <= 0) {
+            return;
+        }
+
+        foreach ($recipe->ingredients as $ing) {
+            $needed = round(($ing->quantityInBaseUnit() / $recipe->yield_qty) * $qty, 4);
+            $ingredient = $this->lockItem($ing->ingredient_item_id);
+            $this->restoreSupplierStock($ingredient, $needed);
+            $this->move($ingredient, $needed, MovementType::VOID, 'outbounds', $outboundId, (float) $ingredient->harga_beli, "Batal Bahan Resep: {$item->name}");
+        }
+    }
 
     /**
      * Potong stok per supplier secara FIFO: supplier yang paling awal
      * terdaftar (id terkecil) dihabiskan dulu.
      */
-    private function deductSupplierStockFifo(Item $item, int $quantity): void
+    private function deductSupplierStockFifo(Item $item, float|int $quantity): void
     {
-        $remaining = $quantity;
+        $remaining = (float) $quantity;
 
         $supplierStocks = $item->itemSuppliers()
             ->where('current_stock', '>', 0)
@@ -307,12 +582,12 @@ class StockService
      * mengambil dari supplier paling awal, jadi stok dikembalikan ke sana juga.
      * (Rincian potongan per supplier tidak disimpan, sehingga ini pendekatan.)
      */
-    private function restoreSupplierStock(Item $item, int $quantity): void
+    private function restoreSupplierStock(Item $item, float|int $quantity): void
     {
         $supplierStock = $item->itemSuppliers()->orderBy('id')->lockForUpdate()->first();
 
         if ($supplierStock) {
-            $supplierStock->current_stock += $quantity;
+            $supplierStock->current_stock = round((float) $supplierStock->current_stock + (float) $quantity, 4);
             $supplierStock->save();
         }
     }
@@ -328,16 +603,16 @@ class StockService
      */
     private function move(
         Item $item,
-        int $quantity,
+        float|int $quantity,
         MovementType $type,
         string $referenceType,
         int $referenceId,
         float|string|null $price,
         string $notes,
     ): StockMovement {
-        $stockBefore = $item->current_stock;
+        $stockBefore = (float) $item->current_stock;
 
-        $item->current_stock += $quantity;
+        $item->current_stock = round($stockBefore + (float) $quantity, 4);
         $item->save();
 
         return StockMovement::create([

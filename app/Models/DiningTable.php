@@ -29,12 +29,12 @@ class DiningTable extends Model
         return $this->hasMany(Outbound::class);
     }
 
-    /** Penjualan yang sedang "menempati" meja ini. */
+    /** Penjualan yang sedang "menempati" meja ini (baik Open Bill maupun sudah bayar tapi belum selesai makan). */
     public function activeOrders(): HasMany
     {
         return $this->outbounds()
             ->where('order_type', OrderType::DineIn->value)
-            ->where('status', TransactionStatus::COMPLETED->value)
+            ->whereIn('status', [TransactionStatus::OPEN->value, TransactionStatus::COMPLETED->value])
             ->whereNull('table_released_at');
     }
 

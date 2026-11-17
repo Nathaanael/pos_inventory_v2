@@ -80,6 +80,18 @@ enum BusinessType: string
         return $this === self::Makanan;
     }
 
+    /** Modul memakai Modifier & Catatan Menu (topping, level gula/es, open bill) di transaksi? */
+    public function usesModifiers(): bool
+    {
+        return $this === self::Makanan;
+    }
+
+    /** Modul memakai Resep / Bill of Materials (BOM) & Bahan Baku? */
+    public function usesRecipes(): bool
+    {
+        return $this === self::Makanan;
+    }
+
     /**
      * @deprecated Pakai features(). Disimpan agar kode lama tetap jalan.
      *

@@ -87,7 +87,12 @@
                 <x-common.crud-form-fields />
 
                 <x-common.form.field label="Nama" for="unit-name" error="name" required>
-                    <x-common.form.select id="unit-name" name="name" x-model="form.name" :options="$options" placeholder="Pilih opsi" required />
+                    <x-ui.input id="unit-name" name="name" x-model="form.name" list="unit-suggestions" placeholder="mis. cup, porsi, gram, ml, pcs" autocomplete="off" required />
+                    <datalist id="unit-suggestions">
+                        @foreach ($options as $label)
+                            <option value="{{ $label }}"></option>
+                        @endforeach
+                    </datalist>
                 </x-common.form.field>
             </form>
 

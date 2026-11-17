@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CashierShift;
 use App\Models\Outbound;
 use App\Models\StoreSetting;
 use Mike42\Escpos\Printer;
@@ -143,14 +144,154 @@ class ThermalPrintService
             // Quantity x Price = Subtotal
             $qty = number_format($outboundItem->quantity);
             $unit = $outboundItem->item?->unit?->name ?? 'pcs';
-            $price = number_format($outboundItem->sell_price, 0, ',', '.');
+            $unitSell = (float) $outboundItem->sell_price + (float) ($outboundItem->modifiers_total ?? 0);
+            $price = number_format($unitSell, 0, ',', '.');
             $subtotal = number_format($outboundItem->subtotal, 0, ',', '.');
 
             $left = " {$qty}{$unit} x {$price}";
             $printer->text($this->twoColumns($left, $subtotal) . "\n");
+
+            if (! empty($outboundItem->modifiers_snapshot)) {
+                $modNames = collect($outboundItem->modifiers_snapshot)->pluck('name')->implode(', ');
+                if ($modNames !== '') {
+                    $printer->text($this->wrap("  + " . $modNames));
+                }
+            }
+
+            if (filled($outboundItem->notes)) {
+                $printer->text($this->wrap("  * " . $outboundItem->notes));
+            }
         }
 
         $printer->text(str_repeat('=', self::LINE_WIDTH) . "\n");
+    }
+
+    /**
+     * Cetak Kitchen Order Ticket (KOT) untuk dapur/bar (tanpa harga).
+     */
+    public function printKitchenTicket(Outbound $outbound, ?iterable $onlyItems = null): void
+    {
+        $store = StoreSetting::current();
+        $printerName = $store->printer_name ?: env('THERMAL_PRINTER_NAME', 'RP58 Printer');
+        $tempFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'kot_' . $outbound->id . '_' . time() . '.bin';
+
+        try {
+            $connector = new FilePrintConnector($tempFile);
+            $printer = new Printer($connector);
+
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $printer->setEmphasis(true);
+            $printer->text("*** TIKET DAPUR (KOT) ***\n");
+            $printer->setEmphasis(false);
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->text("No     : " . $outbound->transaction_code . "\n");
+            $printer->text("Jam    : " . now()->format('d/m/Y H:i') . "\n");
+            if ($outbound->orderLabel()) {
+                $printer->setEmphasis(true);
+                $printer->text("Pesanan: " . $outbound->orderLabel() . "\n");
+                $printer->setEmphasis(false);
+            }
+            if ($outbound->customer_name) {
+                $printer->text("Cust   : " . $outbound->customer_name . "\n");
+            }
+            $printer->text(str_repeat('=', self::LINE_WIDTH) . "\n");
+
+            $items = $onlyItems ?? $outbound->items;
+            foreach ($items as $line) {
+                $itemName = $line->item?->name ?? 'Item';
+                $printer->setEmphasis(true);
+                $printer->text($this->wrap("{$line->quantity}x {$itemName}"));
+                $printer->setEmphasis(false);
+
+                if (! empty($line->modifiers_snapshot)) {
+                    foreach ($line->modifiers_snapshot as $mod) {
+                        $printer->text($this->wrap("   + " . ($mod['name'] ?? '')));
+                    }
+                }
+                if (filled($line->notes)) {
+                    $printer->text($this->wrap("   * Catatan: " . $line->notes));
+                }
+            }
+
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+            $printer->feed(4);
+            $printer->close();
+
+            $this->sendRawToPrinter($printerName, $tempFile);
+        } finally {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+        }
+    }
+
+    /**
+     * Cetak laporan Shift Kasir (X-Report saat masih buka, Z-Report setelah tutup).
+     */
+    public function printShiftReport(CashierShift $shift): void
+    {
+        $store = StoreSetting::current();
+        $printerName = $store->printer_name ?: env('THERMAL_PRINTER_NAME', 'RP58 Printer');
+        $tempFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'shift_' . $shift->id . '_' . time() . '.bin';
+        $summary = $shift->summary();
+
+        try {
+            $connector = new FilePrintConnector($tempFile);
+            $printer = new Printer($connector);
+
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $printer->setEmphasis(true);
+            $printer->text($shift->status === CashierShift::STATUS_CLOSED ? "Z-REPORT (TUTUP SHIFT)\n" : "X-REPORT (SHIFT AKTIF)\n");
+            $printer->setEmphasis(false);
+            $printer->text($this->wrap($store->store_name ?: StoreSetting::DEFAULT_NAME));
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->text("Kasir  : " . ($shift->user?->name ?? '-') . "\n");
+            $printer->text("Buka   : " . $shift->opened_at->format('d/m/Y H:i') . "\n");
+            if ($shift->closed_at) {
+                $printer->text("Tutup  : " . $shift->closed_at->format('d/m/Y H:i') . "\n");
+            }
+            $printer->text(str_repeat('=', self::LINE_WIDTH) . "\n");
+
+            $money = fn (float $v) => 'Rp' . number_format($v, 0, ',', '.');
+            $printer->text($this->twoColumns('Modal Awal', $money($summary['opening_cash'])) . "\n");
+            $printer->text($this->twoColumns('Order Selesai', (string) $summary['orders_count']) . "\n");
+            $printer->text($this->twoColumns('Order Void', (string) $summary['void_count']) . "\n");
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+
+            foreach ($summary['payments_by_method'] as $method => $row) {
+                $label = Outbound::PAYMENT_METHODS[$method] ?? ucfirst($method);
+                $printer->text($this->twoColumns($label, $money($row['total'])) . "\n");
+            }
+            $printer->setEmphasis(true);
+            $printer->text($this->twoColumns('Total Omzet', $money($summary['total_sales'])) . "\n");
+            $printer->setEmphasis(false);
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+
+            $printer->text($this->twoColumns('Kas Masuk', $money($summary['cash_in'])) . "\n");
+            $printer->text($this->twoColumns('Kas Keluar', $money($summary['cash_out'])) . "\n");
+            $printer->setEmphasis(true);
+            $printer->text($this->twoColumns('Est. Kas Laci', $money($summary['expected_cash'])) . "\n");
+            $printer->setEmphasis(false);
+
+            if ($shift->status === CashierShift::STATUS_CLOSED) {
+                $printer->text($this->twoColumns('Kas Aktual', $money((float) $shift->actual_cash)) . "\n");
+                $printer->text($this->twoColumns('Selisih', $money((float) $shift->cash_difference)) . "\n");
+            }
+
+            $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
+            $printer->feed(4);
+            $printer->close();
+
+            $this->sendRawToPrinter($printerName, $tempFile);
+        } finally {
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+        }
     }
 
     private function printTotals(Printer $printer, Outbound $outbound): void

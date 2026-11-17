@@ -25,14 +25,26 @@ class TaxCalculator
      * @param  array<int, array<string, mixed>>|null  $rules  aturan master (default: dari database)
      * @return array{subtotal: float, service_amount: float, tax_amount: float, grand_total: float, details: array<int, array<string, mixed>>}
      */
-    public function calculate(array $lines, ?string $orderType = null, ?array $rules = null): array
+    public function calculate(array $lines, ?string $orderType = null, ?array $rules = null, float $discountAmount = 0.0): array
     {
         $subtotal = (float) collect($lines)->sum('subtotal');
-        $empty = ['subtotal' => $subtotal, 'service_amount' => 0.0, 'tax_amount' => 0.0, 'grand_total' => $subtotal, 'details' => []];
+        $discount = min($subtotal, max(0.0, $discountAmount));
+        $netSubtotal = max(0.0, $subtotal - $discount);
+        $empty = [
+            'subtotal' => $subtotal,
+            'discount_amount' => $discount,
+            'net_subtotal' => $netSubtotal,
+            'service_amount' => 0.0,
+            'tax_amount' => 0.0,
+            'grand_total' => $netSubtotal,
+            'details' => [],
+        ];
 
-        if (! StoreSetting::usesTaxes() || $subtotal <= 0) {
+        if (! StoreSetting::usesTaxes() || $netSubtotal <= 0) {
             return $empty;
         }
+
+        $ratio = $subtotal > 0 ? ($netSubtotal / $subtotal) : 0.0;
 
         $rules ??= Tax::active()->get()->map->toRule()->all();
         $applicable = array_values(array_filter($rules, fn ($r) => $r['applies_to'] === 'all' || ($orderType && $r['applies_to'] === $orderType)));
@@ -52,21 +64,21 @@ class TaxCalculator
             $details[$key]['amount'] += $amount;
         };
 
-        // 1. Biaya layanan dari subtotal.
+        // 1. Biaya layanan dari net subtotal (setelah diskon).
         $exclusiveServiceRate = 0.0;
         foreach ($services as $rule) {
             $r = $rule['rate'] / 100;
             if ($rule['method'] === 'exclusive') {
-                $add('s'.$rule['id'], $rule, $subtotal * $r);
+                $add('s'.$rule['id'], $rule, $netSubtotal * $r);
                 $exclusiveServiceRate += $r;
             } else {
-                $add('s'.$rule['id'], $rule, $subtotal - $subtotal / (1 + $r));
+                $add('s'.$rule['id'], $rule, $netSubtotal - $netSubtotal / (1 + $r));
             }
         }
 
         // 2. Pajak per barang (override barang mengalahkan master).
         foreach ($lines as $line) {
-            $base = (float) $line['subtotal'] * (1 + $exclusiveServiceRate);
+            $base = ((float) $line['subtotal'] * $ratio) * (1 + $exclusiveServiceRate);
             $itemRate = $line['tax_rate'] ?? null;
 
             $lineTaxes = $itemRate !== null && $itemRate !== ''
@@ -97,9 +109,11 @@ class TaxCalculator
 
         return [
             'subtotal' => $subtotal,
+            'discount_amount' => $discount,
+            'net_subtotal' => $netSubtotal,
             'service_amount' => $service,
             'tax_amount' => $tax,
-            'grand_total' => $subtotal + $service + $tax,
+            'grand_total' => $netSubtotal + $service + $tax,
             'details' => $details,
         ];
     }

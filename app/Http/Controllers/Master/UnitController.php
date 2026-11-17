@@ -13,6 +13,15 @@ class UnitController extends Controller
 {
     public const OPTIONS = [
         'pcs' => 'Pcs',
+        'cup' => 'Cup',
+        'porsi' => 'Porsi',
+        'gram' => 'Gram',
+        'kg' => 'Kg',
+        'ml' => 'Ml',
+        'liter' => 'Liter',
+        'botol' => 'Botol',
+        'pack' => 'Pack',
+        'box' => 'Box',
         'meter' => 'Meter',
         'yard' => 'Yard',
     ];
@@ -47,7 +56,7 @@ class UnitController extends Controller
 
     public function update(Request $request, Unit $unit): RedirectResponse
     {
-        $unit->update($this->validated($request));
+        $unit->update($this->validated($request, $unit));
 
         return back()->with('success', 'Berhasil diperbarui');
     }
@@ -94,10 +103,12 @@ class UnitController extends Controller
         return back()->with('success', 'Berhasil dihapus');
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, ?Unit $unit = null): array
     {
         return $request->validate([
-            'name' => ['required', Rule::in(array_keys(self::OPTIONS))],
-        ], [], ['name' => 'Nama']);
+            'name' => ['required', 'string', 'max:50', Rule::unique('units', 'name')->ignore($unit)],
+        ], [
+            'name.unique' => 'Satuan ini sudah ada.',
+        ], ['name' => 'Nama']);
     }
 }

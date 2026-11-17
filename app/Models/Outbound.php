@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\OrderType;
+use App\Enums\PaymentStatus;
 use App\Enums\TransactionStatus;
 use App\Traits\HasSequentialCode;
 use Illuminate\Database\Eloquent\Model;
@@ -22,9 +23,11 @@ class Outbound extends Model
     protected $casts = [
         'date' => 'date',
         'status' => TransactionStatus::class,
+        'payment_status' => PaymentStatus::class,
         'total_amount' => 'decimal:2',
         'order_type' => OrderType::class,
         'table_released_at' => 'datetime',
+        'paid_at' => 'datetime',
         'tax_details' => 'array',
     ];
 
@@ -35,6 +38,31 @@ class Outbound extends Model
     public function payableTotal(): float
     {
         return (float) ($this->grand_total ?? $this->total_amount);
+    }
+
+    public function isOpenBill(): bool
+    {
+        return $this->status === TransactionStatus::OPEN;
+    }
+
+    public function paidTotal(): float
+    {
+        if ($this->relationLoaded('payments') && $this->payments->isNotEmpty()) {
+            return (float) $this->payments->sum('amount');
+        }
+
+        if ($this->payments()->exists()) {
+            return (float) $this->payments()->sum('amount');
+        }
+
+        return $this->payment_status === PaymentStatus::PAID || $this->status === TransactionStatus::COMPLETED
+            ? $this->payableTotal()
+            : 0.0;
+    }
+
+    public function remainingBalance(): float
+    {
+        return max(0.0, $this->payableTotal() - $this->paidTotal());
     }
 
     public function diningTable()
@@ -69,5 +97,15 @@ class Outbound extends Model
     public function items()
     {
         return $this->hasMany(OutboundItem::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(OutboundPayment::class);
+    }
+
+    public function shift()
+    {
+        return $this->belongsTo(CashierShift::class, 'cashier_shift_id');
     }
 }

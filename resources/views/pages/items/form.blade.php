@@ -160,6 +160,114 @@
                     </x-common.component-card>
                 @endif
 
+                @if ($usesModifiers)
+                    <x-common.component-card title="Modifier & Topping" desc="Pilih grup opsi tambahan (mis. Level Gula, Topping) yang muncul saat kasir memilih menu ini.">
+                        @php
+                            $selectedModifiers = collect(old('modifier_group_ids', $item->relationLoaded('modifierGroups') ? $item->modifierGroups->pluck('id')->all() : []))
+                                ->map(fn ($id) => (int) $id)
+                                ->all();
+                        @endphp
+                        @if ($modifierGroupOptions->isEmpty())
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                Belum ada grup modifier aktif. Tambah di menu <a href="{{ route('modifiers.index') }}" class="text-brand-600 underline dark:text-brand-400">Modifier & Topping</a>.
+                            </p>
+                        @else
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                @foreach ($modifierGroupOptions as $group)
+                                    <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-3 transition hover:border-brand-300 dark:border-gray-800 dark:hover:border-brand-500/40">
+                                        <input type="checkbox" name="modifier_group_ids[]" value="{{ $group->id }}"
+                                            @checked(in_array($group->id, $selectedModifiers, true))
+                                            class="size-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" />
+                                        <span class="text-sm font-medium text-gray-800 dark:text-white/90">{{ $group->name }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        @endif
+                    </x-common.component-card>
+                @endif
+
+                @if ($usesRecipes)
+                    @php
+                        $recipeRows = old('recipe_ingredients', $item->relationLoaded('recipe') && $item->recipe
+                            ? $item->recipe->ingredients->map(fn ($r) => [
+                                'ingredient_item_id' => $r->ingredient_item_id,
+                                'quantity' => (float) $r->quantity,
+                                'unit_id' => $r->unit_id,
+                            ])->values()->all()
+                            : []);
+                    @endphp
+                    <x-common.component-card title="Tipe Menu & Resep (BOM)" desc="Atur apakah item ini Menu Jadi (dengan resep pemotong stok bahan baku), Bahan Baku Dapur, atau Barang Jual Langsung.">
+                        <div class="space-y-4" x-data="{
+                                itemType: @js(old('item_type', $item->item_type ?? \App\Models\Item::TYPE_MENU)),
+                                trackStock: @js((bool) old('track_stock', $item->exists ? $item->track_stock : false)),
+                                rows: @js($recipeRows),
+                                addRow() { this.rows.push({ ingredient_item_id: '', quantity: '', unit_id: '' }); },
+                            }">
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <x-common.form.field label="Tipe Item" for="item_type">
+                                    <select id="item_type" name="item_type" x-model="itemType"
+                                        class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                                        @foreach (\App\Models\Item::TYPES as $val => $label)
+                                            <option value="{{ $val }}">{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </x-common.form.field>
+                                <div x-show="itemType === 'menu'" class="flex items-end pb-2">
+                                    <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="checkbox" name="track_stock" value="1" x-model="trackStock"
+                                            class="size-4 rounded border-gray-300 text-brand-500" />
+                                        <span>Lacak stok menu sendiri (jangan potong bahan baku)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div x-show="itemType === 'menu' && !trackStock" class="space-y-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-800 dark:text-white/90">Komposisi Bahan Baku</h4>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Stok bahan baku otomatis terpotong saat menu terjual di kasir.</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <label class="text-xs text-gray-500 dark:text-gray-400">Hasil (Porsi):</label>
+                                        <input type="number" name="recipe_yield_qty" step="0.01" min="0.01"
+                                            value="{{ old('recipe_yield_qty', $item->recipe?->yield_qty ?? 1) }}"
+                                            class="h-9 w-20 rounded-lg border border-gray-300 bg-transparent px-2 text-center text-sm dark:border-gray-700 dark:text-white/90" />
+                                        <x-ui.button type="button" size="sm" variant="outline" x-on:click="addRow()">+ Bahan</x-ui.button>
+                                    </div>
+                                </div>
+
+                                @if ($ingredientOptions->isEmpty())
+                                    <p class="text-xs text-warning-600 dark:text-warning-400">Belum ada item bertipe <strong>Bahan Baku</strong>. Buat item bahan baku terlebih dahulu.</p>
+                                @endif
+
+                                <template x-for="(row, idx) in rows" :key="idx">
+                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_130px_auto] items-center">
+                                        <select x-bind:name="`recipe_ingredients[${idx}][ingredient_item_id]`" x-model="row.ingredient_item_id"
+                                            class="h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                                            <option value="">-- Pilih Bahan Baku --</option>
+                                            @foreach ($ingredientOptions as $ing)
+                                                <option value="{{ $ing->id }}">{{ $ing->name }} ({{ $ing->unit?->name }})</option>
+                                            @endforeach
+                                        </select>
+                                        <input type="number" step="0.0001" min="0.0001" x-bind:name="`recipe_ingredients[${idx}][quantity]`" x-model="row.quantity" placeholder="Takaran"
+                                            class="h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm dark:border-gray-700 dark:text-white/90" />
+                                        <select x-bind:name="`recipe_ingredients[${idx}][unit_id]`" x-model="row.unit_id"
+                                            class="h-10 rounded-lg border border-gray-300 bg-transparent px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90">
+                                            <option value="">Satuan Dasar</option>
+                                            @foreach ($unitOptions as $uid => $uname)
+                                                <option value="{{ $uid }}">{{ $uname }}</option>
+                                            @endforeach
+                                        </select>
+                                        <button type="button" x-on:click="rows.splice(idx, 1)" class="rounded-lg p-2 text-error-500 hover:bg-error-50 dark:hover:bg-error-500/10" title="Hapus">
+                                            <x-svg.trash-bin class="size-4" />
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </x-common.component-card>
+                @endif
+
                 @if ($usesSuppliers)
                 <x-common.component-card title="Supplier & Harga Beli" desc="Satu barang bisa disuplai oleh banyak supplier dengan harga beli yang berbeda">
                     @error('suppliers')

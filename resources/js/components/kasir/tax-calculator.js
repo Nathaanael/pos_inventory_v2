@@ -5,11 +5,15 @@
  * lines: [{ subtotal, tax_rate (null = ikut master), tax_method }]
  * rules: [{ id, name, type: 'tax'|'service', rate, method: 'inclusive'|'exclusive', applies_to }]
  */
-export default function calculateTaxes(lines, rules = [], orderType = null) {
+export default function calculateTaxes(lines, rules = [], orderType = null, discountAmount = 0) {
     const subtotal = lines.reduce((sum, l) => sum + (Number(l.subtotal) || 0), 0);
-    const result = { subtotal, service_amount: 0, tax_amount: 0, grand_total: subtotal, details: [] };
+    const discount = Math.min(subtotal, Math.max(0, Number(discountAmount) || 0));
+    const netSubtotal = Math.max(0, subtotal - discount);
+    const result = { subtotal, discount_amount: discount, net_subtotal: netSubtotal, service_amount: 0, tax_amount: 0, grand_total: netSubtotal, details: [] };
     if (!rules.length && !lines.some((l) => l.tax_rate !== null && l.tax_rate !== undefined && l.tax_rate !== '')) return result;
-    if (subtotal <= 0) return result;
+    if (netSubtotal <= 0) return result;
+
+    const ratio = subtotal > 0 ? netSubtotal / subtotal : 0;
 
     const applicable = rules.filter((r) => r.applies_to === 'all' || (orderType && r.applies_to === orderType));
     const services = applicable.filter((r) => r.type === 'service');
@@ -27,15 +31,15 @@ export default function calculateTaxes(lines, rules = [], orderType = null) {
     for (const rule of services) {
         const r = rule.rate / 100;
         if (rule.method === 'exclusive') {
-            add(`s${rule.id}`, rule, subtotal * r);
+            add(`s${rule.id}`, rule, netSubtotal * r);
             exclusiveServiceRate += r;
         } else {
-            add(`s${rule.id}`, rule, subtotal - subtotal / (1 + r));
+            add(`s${rule.id}`, rule, netSubtotal - netSubtotal / (1 + r));
         }
     }
 
     for (const line of lines) {
-        const base = (Number(line.subtotal) || 0) * (1 + exclusiveServiceRate);
+        const base = ((Number(line.subtotal) || 0) * ratio) * (1 + exclusiveServiceRate);
         const hasOwn = line.tax_rate !== null && line.tax_rate !== undefined && line.tax_rate !== '';
         const lineTaxes = hasOwn
             ? [{
@@ -57,7 +61,7 @@ export default function calculateTaxes(lines, rules = [], orderType = null) {
     result.details = [...details.values()].map((d) => ({ ...d, amount: Math.round(d.amount) })).filter((d) => d.amount > 0);
     result.service_amount = result.details.filter((d) => d.type === 'service' && !d.included).reduce((s, d) => s + d.amount, 0);
     result.tax_amount = result.details.filter((d) => d.type === 'tax' && !d.included).reduce((s, d) => s + d.amount, 0);
-    result.grand_total = subtotal + result.service_amount + result.tax_amount;
+    result.grand_total = netSubtotal + result.service_amount + result.tax_amount;
 
     return result;
 }

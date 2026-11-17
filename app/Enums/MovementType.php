@@ -11,4 +11,5 @@ enum MovementType: string
     case ADJUSTMENT = 'adjustment';
     case INITIAL = 'initial';
     case VOID = 'void';
+    case WASTE = 'waste';
 }

@@ -18,6 +18,8 @@ class EnsureModuleCapability
         $allowed = match ($capability) {
             'suppliers' => StoreSetting::usesSuppliers(),
             'taxes' => StoreSetting::usesTaxes(),
+            'modifiers' => StoreSetting::usesModifiers(),
+            'recipes' => StoreSetting::usesRecipes(),
             default => false,
         };
 

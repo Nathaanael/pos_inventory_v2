@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (\Illuminate\Support\Facades\DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         \Illuminate\Support\Facades\DB::statement("ALTER TABLE stock_opnames MODIFY status VARCHAR(50) DEFAULT 'draft'");
         \Illuminate\Support\Facades\DB::statement("ALTER TABLE returns MODIFY status VARCHAR(50) DEFAULT 'pending'");
         \Illuminate\Support\Facades\DB::statement("ALTER TABLE outbounds MODIFY status VARCHAR(50) DEFAULT 'selesai'");

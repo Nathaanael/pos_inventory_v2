@@ -6,6 +6,8 @@ use App\Enums\Feature;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Item;
+use App\Models\ModifierGroup;
+use App\Models\Recipe;
 use App\Models\StockMovement;
 use App\Models\StoreSetting;
 use App\Models\Supplier;
@@ -75,6 +77,18 @@ class ItemController extends Controller
                 'image' => $this->hasImageFeature() ? $request->file('image')?->store('items', 'public') : null,
             ]);
 
+            if (StoreSetting::usesModifiers()) {
+                $item->modifierGroups()->sync($data['modifier_group_ids']);
+            }
+
+            if (StoreSetting::usesRecipes()) {
+                $this->syncRecipe($item, $data['recipe']);
+            }
+
+            if (StoreSetting::usesRecipes()) {
+                $this->syncRecipe($item, $data['recipe']);
+            }
+
             // Modul dengan supplier: harga beli diambil dari supplier pertama.
             // Modul tanpa supplier (FNB): harga beli (HPP) sudah diisi langsung di $data['item'].
             if (StoreSetting::usesSuppliers()) {
@@ -95,7 +109,7 @@ class ItemController extends Controller
 
     public function edit(Item $item): View
     {
-        $item->load('itemSuppliers');
+        $item->load(['itemSuppliers', 'modifierGroups', 'recipe.ingredients']);
 
         return view('pages.items.form', [
             'title' => 'Ubah Master Barang',
@@ -126,6 +140,18 @@ class ItemController extends Controller
             }
 
             $item->update($attributes);
+
+            if (StoreSetting::usesModifiers()) {
+                $item->modifierGroups()->sync($data['modifier_group_ids']);
+            }
+
+            if (StoreSetting::usesRecipes()) {
+                $this->syncRecipe($item, $data['recipe']);
+            }
+
+            if (StoreSetting::usesRecipes()) {
+                $this->syncRecipe($item, $data['recipe']);
+            }
 
             // Modul tanpa supplier (FNB): data supplier lama (bila ada) dibiarkan apa adanya.
             if (! StoreSetting::usesSuppliers()) {
@@ -205,6 +231,12 @@ class ItemController extends Controller
             'supplierOptions' => Supplier::where('is_active', true)->orderBy('name')->pluck('name', 'id'),
             'usesSuppliers' => StoreSetting::usesSuppliers(),
             'usesTaxes' => StoreSetting::usesTaxes(),
+            'usesModifiers' => StoreSetting::usesModifiers(),
+            'usesRecipes' => StoreSetting::usesRecipes(),
+            'modifierGroupOptions' => StoreSetting::usesModifiers() ? ModifierGroup::active()->get(['id', 'name']) : collect(),
+            'ingredientOptions' => StoreSetting::usesRecipes()
+                ? Item::where('item_type', Item::TYPE_INGREDIENT)->with('unit:id,name')->orderBy('name')->get(['id', 'name', 'unit_id', 'harga_beli'])
+                : collect(),
         ];
     }
 
@@ -257,6 +289,15 @@ class ItemController extends Controller
             'unit_id' => ['required', Rule::exists('units', 'id')],
             'min_stock' => ['required', 'numeric', 'min:0'],
             'rack_location' => ['nullable', 'string', 'max:255'],
+            'item_type' => ['nullable', Rule::in(array_keys(Item::TYPES))],
+            'track_stock' => ['nullable', 'boolean'],
+            'recipe_yield_qty' => ['nullable', 'numeric', 'min:0.0001'],
+            'recipe_ingredients' => ['nullable', 'array'],
+            'recipe_ingredients.*.ingredient_item_id' => ['required_with:recipe_ingredients', 'integer', Rule::exists('items', 'id')],
+            'recipe_ingredients.*.quantity' => ['required_with:recipe_ingredients', 'numeric', 'min:0.0001'],
+            'recipe_ingredients.*.unit_id' => ['nullable', 'integer', Rule::exists('units', 'id')],
+            'modifier_group_ids' => ['nullable', 'array'],
+            'modifier_group_ids.*' => ['integer', Rule::exists('modifier_groups', 'id')],
         ], [
             'barcode.unique' => 'barcode ini sudah ada',
             'suppliers.required' => 'Tambahkan minimal satu supplier.',
@@ -310,6 +351,12 @@ class ItemController extends Controller
             $attributes['tax_rate'] = $hasRate ? $validated['tax_rate'] : null;
             $attributes['tax_method'] = $hasRate ? $validated['tax_method'] : null;
         }
+        if (StoreSetting::usesRecipes()) {
+            $attributes['item_type'] = $validated['item_type'] ?? Item::TYPE_MENU;
+            $attributes['track_stock'] = $attributes['item_type'] === Item::TYPE_MENU
+                ? $request->boolean('track_stock', false)
+                : true;
+        }
 
         $suppliers = array_map(fn ($row) => [
             'id' => $row['id'] ?? null,
@@ -318,6 +365,47 @@ class ItemController extends Controller
             'supplier_sku' => $row['supplier_sku'] ?? null,
         ], array_values($validated['suppliers'] ?? []));
 
-        return ['item' => $attributes, 'suppliers' => $suppliers];
+        $recipeRows = array_values(array_filter(
+            $validated['recipe_ingredients'] ?? [],
+            fn ($row) => ! empty($row['ingredient_item_id']) && (float) ($row['quantity'] ?? 0) > 0
+        ));
+
+        return [
+            'item' => $attributes,
+            'suppliers' => $suppliers,
+            'modifier_group_ids' => array_map('intval', $validated['modifier_group_ids'] ?? []),
+            'recipe' => [
+                'yield_qty' => (float) ($validated['recipe_yield_qty'] ?? 1),
+                'ingredients' => $recipeRows,
+            ],
+        ];
+    }
+
+    private function syncRecipe(Item $item, array $recipeData): void
+    {
+        if ($item->item_type !== Item::TYPE_MENU || empty($recipeData['ingredients'])) {
+            $item->recipe()->delete();
+
+            return;
+        }
+
+        $recipe = Recipe::updateOrCreate(
+            ['menu_item_id' => $item->id],
+            ['yield_qty' => max(0.0001, $recipeData['yield_qty'])]
+        );
+
+        $recipe->ingredients()->delete();
+        foreach ($recipeData['ingredients'] as $row) {
+            $recipe->ingredients()->create([
+                'ingredient_item_id' => (int) $row['ingredient_item_id'],
+                'quantity' => (float) $row['quantity'],
+                'unit_id' => ! empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+            ]);
+        }
+
+        // Perbarui harga_beli estimasi dari HPP resep jika menu tidak melacak stok sendiri.
+        if (! $item->track_stock) {
+            $item->update(['harga_beli' => $item->calculateRecipeCogs()]);
+        }
     }
 }
