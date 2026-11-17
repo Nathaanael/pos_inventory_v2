@@ -70,6 +70,18 @@ export default (config = {}) => ({
         this.modalOpen = false;
     },
 
+    /**
+     * Form modal yang disimpan lewat ajaxForm berhasil: tutup modal, atau kosongkan form
+     * bila tombol "Simpan & buat lagi" yang diklik. Pasang: x-on:ajax-form-success="saved($event)".
+     */
+    saved(event) {
+        if (event.detail?.submitter?.name === 'create_another') {
+            this.create();
+            return;
+        }
+        this.close();
+    },
+
     confirm(options) {
         window.dispatchEvent(new CustomEvent('confirm', { detail: options }));
     },

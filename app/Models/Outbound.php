@@ -108,4 +108,10 @@ class Outbound extends Model
     {
         return $this->belongsTo(CashierShift::class, 'cashier_shift_id');
     }
+
+    /** Member yang dipilih di POS (opsional). */
+    public function member()
+    {
+        return $this->belongsTo(Member::class);
+    }
 }

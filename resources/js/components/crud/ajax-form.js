@@ -16,15 +16,20 @@ import Alpine from "alpinejs";
  *
  * Error validasi tampil di <p data-error-for="field"> (otomatis ada di <x-common.form.field>),
  * dan pesan pertama juga muncul sebagai toast. `busy` untuk menonaktifkan tombol.
+ *
+ * Pakai x-on:submit.prevent="submit($event)" agar nama/nilai tombol yang diklik ikut terkirim
+ * (mis. "Simpan & buat lagi"). Setelah berhasil, form memancarkan event "ajax-form-success"
+ * (bubbling) dengan detail { data, submitter } — mis. untuk menutup modal.
  */
 export default ({ regions = [] } = {}) => ({
     busy: false,
     errors: {},
 
-    async submit() {
+    async submit(event = null) {
         if (this.busy) return;
 
         const form = this.$el;
+        const submitter = event?.submitter ?? null;
         this.busy = true;
         this.errors = {};
         clearFieldErrors(form);
@@ -35,7 +40,7 @@ export default ({ regions = [] } = {}) => ({
             const { data } = await window.axios({
                 method: form.method,
                 url: form.action,
-                data: new FormData(form),
+                data: new FormData(form, submitter),
                 headers: { Accept: "application/json" },
             });
 
@@ -47,6 +52,7 @@ export default ({ regions = [] } = {}) => ({
 
             await refreshRegions(regions);
             toast("success", data?.message ?? "Berhasil disimpan", data?.body ?? null);
+            form.dispatchEvent(new CustomEvent("ajax-form-success", { bubbles: true, detail: { data, submitter } }));
         } catch (error) {
             const response = error.response;
             if (response?.status === 422) {

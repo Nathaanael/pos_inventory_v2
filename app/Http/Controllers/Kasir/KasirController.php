@@ -64,6 +64,8 @@ class KasirController extends Controller
             'catalog' => $this->catalog(),
             'categories' => Category::orderBy('name')->get(['id', 'name'])->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->all(),
             'recent' => $this->recentOrders(),
+            // Open Bill yang belum lunas (meja maupun take away) → bisa dibayar langsung dari POS.
+            'openBills' => $this->openBills(),
             'fnb' => $this->fnbOptions(),
             'tables' => $this->tableList(),
             // Dari halaman Meja: /kasir/pos?meja=ID langsung memilih meja itu.
@@ -95,6 +97,7 @@ class KasirController extends Controller
             'payment_method' => ['nullable', 'string'],
             'paid_amount' => ['nullable', 'numeric'],
             'customer_name' => ['nullable', 'string'],
+            'member_id' => ['nullable', 'integer', 'exists:members,id'],
             'notes' => ['nullable', 'string'],
             'sale_id' => ['nullable', 'string'],
             'order_type' => ['nullable', 'string'],
@@ -236,7 +239,11 @@ class KasirController extends Controller
         return response()->json([
             'ok' => true,
             'message' => "Tagihan {$outbound->transaction_code} lunas.",
+            // Kembalian untuk pembayaran tunai yang lebih dari sisa tagihan.
+            'change' => $cashReceived !== null ? max(0, round($cashReceived - $remaining, 2)) : 0,
             'tables' => $this->tablesWithOrders(),
+            'open_bills' => $this->openBills(),
+            'recent' => $this->recentOrders(),
         ]);
     }
 
@@ -463,6 +470,40 @@ class KasirController extends Controller
             ->all();
     }
 
+    /**
+     * Open Bill yang belum lunas (semua kasir), terlama dulu. Dipakai daftar "Tagihan Belum Lunas" di POS.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function openBills(): array
+    {
+        if (! StoreSetting::usesModifiers()) {
+            return [];
+        }
+
+        return Outbound::query()
+            ->where('status', TransactionStatus::OPEN->value)
+            ->with(['diningTable:id,number,name', 'payments:id,outbound_id,amount'])
+            ->withCount('items')
+            ->oldest('created_at')
+            ->get()
+            ->map(fn (Outbound $o) => [
+                'id' => $o->id,
+                'code' => $o->transaction_code,
+                'no' => Str::afterLast($o->transaction_code, '-'),
+                'customer' => $o->customer_name ?: 'Pelanggan umum',
+                'table' => $o->diningTable ? trim('Meja '.$o->diningTable->number.($o->diningTable->name ? ' · '.$o->diningTable->name : '')) : null,
+                'order' => $o->orderLabel(),
+                'items' => $o->items_count,
+                'total' => $o->payableTotal(),
+                'remaining' => $o->remainingBalance(),
+                'time' => $o->created_at->format('H:i'),
+                'since' => $o->created_at->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+    }
+
     /** @return array{tables: bool, takeAway: bool} */
     private function fnbOptions(): array
     {
@@ -553,6 +594,13 @@ class KasirController extends Controller
      */
     private function processCheckout(array $data): array
     {
+        // Member dipilih dari kolom "Nama pelanggan": nama pelanggan = nama member.
+        $memberId = filled($data['member_id'] ?? null) ? (int) $data['member_id'] : null;
+        $customerName = filled($data['customer_name'] ?? null) ? mb_substr(trim($data['customer_name']), 0, 100) : null;
+        if ($memberId) {
+            $customerName = \App\Models\Member::whereKey($memberId)->value('name') ?? $customerName;
+        }
+
         $fnb = $this->resolveOrderType($data['order_type'] ?? null, $data['table_id'] ?? null);
         if (is_string($fnb)) {
             return ['ok' => false, 'message' => $fnb];
@@ -604,7 +652,8 @@ class KasirController extends Controller
         try {
             $outbound = app(StockService::class)->createOutbound([
                 'date' => now()->toDateString(),
-                'customer_name' => filled($data['customer_name'] ?? null) ? mb_substr(trim($data['customer_name']), 0, 100) : null,
+                'customer_name' => $customerName,
+                'member_id' => $memberId,
                 'price_type_applied' => $priceType,
                 'payment_method' => $paymentMethod,
                 'paid_amount' => $paidAmount,
@@ -636,6 +685,7 @@ class KasirController extends Controller
             'outbound_id' => $outbound->id,
             'catalog' => $this->catalog(),
             'recent' => $this->recentOrders(),
+            'open_bills' => $this->openBills(),
             'tables' => $this->tableList(),
         ];
     }

@@ -15,6 +15,8 @@ import opnameForm from "./components/inventory/opname-form";
 import posCart from "./components/inventory/pos-cart";
 import returnForm from "./components/inventory/return-form";
 import kasirPos from "./components/kasir/kasir-pos";
+import payBill from "./components/kasir/pay-bill";
+import formLoading from "./components/common/form-loading";
 import registerUi from "./ui";
 
 window.Alpine = Alpine;
@@ -80,6 +82,8 @@ Alpine.data("returnForm", returnForm);
 Alpine.data("opnameForm", opnameForm);
 Alpine.data("posCart", posCart);
 Alpine.data("kasirPos", kasirPos);
+Alpine.data("payBill", payBill);
+Alpine.data("formLoading", formLoading);
 
 // Free ships English only: choosing a language only switches the layout direction (RTL for Arabic).
 Alpine.store("direction", {

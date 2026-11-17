@@ -16,22 +16,24 @@
                 <div class="from-brand-950 pointer-events-none absolute inset-x-0 top-0 z-1 h-40 bg-linear-to-b to-transparent dark:from-gray-950"></div>
                 <div class="from-brand-950 via-brand-950/90 pointer-events-none absolute inset-x-0 bottom-0 z-1 h-72 bg-linear-to-t to-transparent dark:from-gray-950 dark:via-gray-950/90"></div>
 
+                {{-- Logo toko ada di atas judul "Masuk" (kolom form); panel ini hanya tagline. --}}
                 <div class="absolute inset-x-0 bottom-0 z-9 flex flex-col items-center px-10 pb-12 text-center">
-                    {{-- Ada logo: tampilkan logo saja; tanpa logo: nama toko. --}}
-                    @if ($store->logoUrl())
-                        <img src="{{ $store->logoUrl() }}" alt="{{ $storeName }}" class="mb-4 max-h-20 w-auto max-w-52 rounded-2xl bg-white object-contain p-3" />
-                    @else
-                        <h2 class="mb-2 text-2xl font-semibold text-white">{{ $storeName }}</h2>
-                    @endif
-                    <p class="max-w-sm text-gray-300 dark:text-white/60">Aplikasi kasir & manajemen inventaris untuk berbagai jenis usaha</p>
+                    <!-- <p class="max-w-sm text-gray-300 dark:text-white/60">Aplikasi kasir & manajemen inventaris untuk berbagai jenis usaha</p> -->
                 </div>
             </div>
 
             <!-- Form -->
             <div class="flex w-full flex-1 flex-col lg:w-1/2">
                 <div class="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
-                    <div class="mb-8 lg:hidden">
-                        <x-common.store-brand href="#" :collapsible="false" />
+                    {{-- Logo toko di atas "Masuk" (semua ukuran layar). Tanpa logo: merek/nama toko. --}}
+                    <div class="mb-8">
+                        @if ($store->logoUrl())
+                            {{-- Latar putih di mode gelap agar logo berwarna gelap tetap terbaca. --}}
+                            <img src="{{ $store->logoUrl() }}" alt="{{ $storeName }}"
+                                class="h-auto max-h-14 w-auto max-w-56 object-contain dark:rounded-xl dark:bg-white dark:p-2" />
+                        @else
+                            <x-common.store-brand href="#" :collapsible="false" />
+                        @endif
                     </div>
 
                     <div class="mb-5 sm:mb-8">

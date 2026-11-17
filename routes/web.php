@@ -19,6 +19,7 @@ use App\Http\Controllers\Kasir\ShiftController;
 use App\Http\Controllers\Master\BrandController;
 use App\Http\Controllers\Master\CategoryController;
 use App\Http\Controllers\Master\DiningTableController;
+use App\Http\Controllers\Master\MemberController;
 use App\Http\Controllers\Master\SupplierController;
 use App\Http\Controllers\Master\UnitController;
 use App\Http\Controllers\Master\UserController;
@@ -62,6 +63,14 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
         Route::get('/riwayat', 'riwayat')->name('riwayat');
         Route::post('/riwayat/{outbound}/print-thermal', 'printThermal')->name('print-thermal');
         Route::get('/belum-siap', 'notReady')->name('belum-siap');
+    });
+
+    // Member dari panel kasir: tambah & ubah saja (hapus hanya di panel admin).
+    Route::controller(MemberController::class)->prefix('kasir/member')->name('kasir.members.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('/search', 'search')->name('search'); // kolom "Nama pelanggan" di POS
+        Route::post('/', 'store')->name('store');
+        Route::put('/{member}', 'update')->name('update');
     });
 
     Route::controller(ShiftController::class)->prefix('kasir/shift')->name('kasir.shift.')->group(function () {
@@ -118,6 +127,13 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
             Route::delete('/bulk', 'bulkDestroy')->name('bulk-destroy');
             Route::put('/{brand}', 'update')->name('update');
             Route::delete('/{brand}', 'destroy')->name('destroy');
+        });
+
+        Route::controller(MemberController::class)->prefix('members')->name('members.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('/{member}', 'update')->name('update');
+            Route::delete('/{member}', 'destroy')->name('destroy');
         });
 
         Route::controller(DiningTableController::class)->prefix('meja')->name('meja.')->middleware('feature:meja')->group(function () {

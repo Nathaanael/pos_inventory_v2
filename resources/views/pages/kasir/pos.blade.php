@@ -24,6 +24,9 @@
             catalog: @js($catalog),
             categories: @js($categories),
             recent: @js($recent),
+            openBills: @js($openBills),
+            memberSearchUrl: @js(route('kasir.members.search')),
+            memberStoreUrl: @js(route('kasir.members.store')),
             fnb: @js($fnb),
             tables: @js($tables),
             preselectTable: @js($preselectTable),
@@ -36,11 +39,13 @@
             taxRules: @js($taxRules),
         })"
         x-on:keydown.window="shortcut($event)"
+        x-on:bill-paid.window="onBillPaid($event.detail)"
         class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_400px]">
 
         {{-- ================= KIRI: cari, kategori, barang ================= --}}
         <div class="flex min-w-0 flex-col gap-4">
-            <x-ui.input-group class="h-12 bg-white dark:bg-white/3">
+            <div class="flex gap-3">
+            <x-ui.input-group class="h-12 min-w-0 flex-1 bg-white dark:bg-white/3">
                 <x-ui.input-group.addon align="inline-start">
                     <x-svg.search class="size-5 text-gray-400" />
                 </x-ui.input-group.addon>
@@ -50,6 +55,19 @@
                     <span class="rounded-md border border-gray-200 px-1.5 text-xs text-gray-400 dark:border-gray-700">/</span>
                 </x-ui.input-group.addon>
             </x-ui.input-group>
+            @if ($usesModifiers)
+                {{-- Buka modal daftar Open Bill untuk dibayar --}}
+                <button type="button" x-on:click="openBillsModal()"
+                    class="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-white/3 dark:text-gray-300 dark:hover:bg-white/5">
+                    <svg class="size-5 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>
+                    <span class="hidden sm:inline">Bayar Open Bill</span>
+                    {{-- Hanya angkanya yang berwarna: merah bila ada tagihan, abu bila kosong. --}}
+                    <span class="min-w-6 rounded-full px-1.5 py-0.5 text-center text-xs font-semibold tabular-nums"
+                        x-bind:class="openBills.length ? 'bg-error-500 text-white' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'"
+                        x-text="openBills.length"></span>
+                </button>
+            @endif
+            </div>
 
             {{-- Kategori --}}
             <div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
@@ -143,8 +161,10 @@
         </div>
 
         {{-- ================= KANAN: pesanan ================= --}}
-        <div class="flex min-w-0 flex-col self-start overflow-hidden rounded-2xl border border-gray-200 bg-white xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] dark:border-gray-800 dark:bg-white/3">
-            <div class="flex flex-col gap-3 border-b border-gray-100 p-5 dark:border-gray-800">
+        {{-- Panel setinggi layar. Bila tidak muat (layar pendek / zoom in) seluruh panel bisa di-scroll,
+             dan tombol simpan tetap menempel di bawah (sticky) agar selalu terlihat. --}}
+        <div class="custom-scrollbar flex min-w-0 flex-col self-start overflow-hidden rounded-2xl border border-gray-200 bg-white xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto dark:border-gray-800 dark:bg-white/3">
+            <div class="flex shrink-0 flex-col gap-3 border-b border-gray-100 p-5 dark:border-gray-800">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Pesanan Baru</h3>
@@ -155,7 +175,45 @@
                     </x-ui.button>
                 </div>
 
-                <x-ui.input x-model="customer" placeholder="Nama pelanggan (opsional)" maxlength="100" />
+                {{-- Nama pelanggan sekaligus cari member (nama / nomor HP); "Tambah member" bila belum terdaftar --}}
+                <div class="relative" x-on:click.outside="memberOpen = false">
+                    {{-- Wadah khusus input: label Member diposisikan terhadap tinggi input saja (bukan + baris HP). --}}
+                    <div class="relative">
+                        <x-ui.input x-model="customer" x-on:input="onCustomerInput()" x-on:keydown="memberKey($event)"
+                            x-on:focus="if (!memberId && customer.trim().length >= 2 && memberResults.length) memberOpen = true"
+                            x-bind:readonly="!!activeOrder" placeholder="Nama pelanggan / cari member (opsional)" maxlength="100"
+                            autocomplete="off" x-bind:class="memberId && 'pe-28'" />
+                        {{-- Member terpilih --}}
+                        <div x-show="memberId" x-cloak class="absolute inset-y-0 end-2 flex items-center gap-1.5">
+                            <span class="inline-flex h-6 items-center rounded-md bg-success-50 px-2 text-xs leading-none font-medium text-success-700 dark:bg-success-500/15 dark:text-success-500">Member</span>
+                            <button type="button" x-on:click="clearMemberSelection(); customer = ''" aria-label="Hapus member"
+                                class="flex size-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/5">
+                                <x-svg.x class="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                    <p x-show="memberId && memberPhone" x-cloak class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-text="'HP ' + memberPhone"></p>
+
+                    {{-- Hasil pencarian member --}}
+                    <div x-show="memberOpen && !memberId" x-cloak
+                        class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-theme-lg dark:border-gray-800 dark:bg-gray-900">
+                        <p x-show="memberLoading" class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Mencari member…</p>
+                        <template x-for="(member, i) in memberResults" :key="member.id">
+                            <button type="button" x-on:click="selectMember(member)" x-on:mouseenter="memberIndex = i"
+                                class="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-start"
+                                x-bind:class="memberIndex === i ? 'bg-brand-50 dark:bg-brand-500/10' : ''">
+                                <span class="truncate text-sm font-medium text-gray-800 dark:text-white/90" x-text="member.name"></span>
+                                <span class="shrink-0 text-xs text-gray-500 tabular-nums dark:text-gray-400" x-text="member.phone_label"></span>
+                            </button>
+                        </template>
+                        <p x-show="!memberLoading && !memberResults.length" class="px-4 pt-3 pb-1 text-sm text-gray-500 dark:text-gray-400">Member tidak ditemukan.</p>
+                        <button type="button" x-show="canAddMember" x-on:click="openQuickMember()"
+                            class="flex w-full items-center gap-2 border-t border-gray-100 px-4 py-3 text-start text-sm font-medium text-brand-600 hover:bg-gray-50 dark:border-gray-800 dark:text-brand-400 dark:hover:bg-white/5">
+                            <x-svg.plus class="size-4" />
+                            <span x-text="'Tambah member &quot;' + customer.trim() + '&quot;'"></span>
+                        </button>
+                    </div>
+                </div>
 
                 {{-- FNB: makan di tempat / take away + nomor meja --}}
                 <template x-if="hasFnb">
@@ -234,7 +292,7 @@
             </div>
 
             {{-- Ringkasan & pembayaran --}}
-            <div class="flex flex-col gap-4 border-t border-gray-100 bg-gray-50 p-5 dark:border-gray-800 dark:bg-white/2">
+            <div class="flex shrink-0 flex-col gap-4 border-t border-gray-100 bg-gray-50 p-5 dark:border-gray-800 dark:bg-white/2">
                 <div class="space-y-1.5">
                     @if ($hasWholesale)
                         <div class="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
@@ -308,6 +366,8 @@
                 </div>
                 <x-ui.textarea x-show="showNotes" x-model="notes" rows="2" maxlength="500" placeholder="Catatan transaksi" class="min-h-16" />
 
+                {{-- Tombol simpan: sticky di dasar panel (bg solid agar isi di belakangnya tidak tembus). --}}
+                <div class="sticky bottom-0 z-1 -mx-5 -mb-5 flex flex-col gap-4 border-t border-gray-100 bg-gray-50 px-5 pt-4 pb-5 dark:border-gray-800 dark:bg-gray-900">
                 <template x-if="activeOrder">
                     <x-ui.button size="lg" class="h-12 w-full text-base" x-bind:disabled="saving || !cart.length" x-on:click="submitAddItems()">
                         <span x-text="saving ? 'Menyimpan…' : 'Tambahkan ke Open Bill'"></span>
@@ -329,8 +389,92 @@
                 </p>
                 <p x-show="!activeOrder && needsTable && cart.length && !selectedTable" class="-mt-2 text-center text-xs text-error-500">Pilih meja dulu · tekan Simpan untuk membuka daftar meja</p>
                 <p class="-mt-2 text-center text-xs text-gray-400">Ctrl+Enter untuk simpan</p>
+                </div>
             </div>
         </div>
+
+        @if ($usesModifiers)
+            {{-- ================= Modal Daftar Open Bill (kartu besar, sekali tekan → bayar) ================= --}}
+            <x-common.modal show="billsOpen" close="billsOpen = false" max-width="4xl">
+                <x-slot:heading>
+                    <span>Bayar Open Bill</span>
+                    <span class="ms-1 text-gray-400" x-text="'(' + openBills.length + ')'"></span>
+                </x-slot:heading>
+
+                <div class="space-y-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            <span x-show="openBills.length">Tekan tagihan untuk membayar · total belum dibayar <strong class="text-gray-800 dark:text-white/90" x-text="money(openBillsTotal)"></strong></span>
+                            <span x-show="!openBills.length">Tidak ada tagihan yang belum dibayar.</span>
+                        </p>
+                        <x-ui.input-group x-show="openBills.length > 6" class="h-11 sm:w-72">
+                            <x-ui.input-group.addon align="inline-start">
+                                <x-svg.search class="size-5 text-gray-400" />
+                            </x-ui.input-group.addon>
+                            <x-ui.input-group.input type="text" x-model="billSearch" placeholder="Cari meja / pelanggan" autocomplete="off" />
+                        </x-ui.input-group>
+                    </div>
+
+                    <div class="custom-scrollbar grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto p-1 sm:grid-cols-2 lg:grid-cols-3">
+                        <template x-for="bill in filteredBills" :key="bill.id">
+                            <div class="flex flex-col overflow-hidden rounded-2xl border-2 border-gray-200 bg-white transition hover:border-brand-400 hover:shadow-theme-md dark:border-gray-700 dark:bg-gray-900">
+                                {{-- Seluruh kartu = tombol bayar (target sentuh besar) --}}
+                                <button type="button" x-on:click="payBill(bill)" class="flex flex-1 flex-col gap-4 p-5 text-start focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-brand-500/30">
+                                    <div class="flex items-center gap-4">
+                                        <span class="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-warning-100 text-xl font-bold text-warning-700 dark:bg-warning-500/20 dark:text-warning-300"
+                                            x-text="bill.table ? bill.table.replace('Meja ', '').split(' · ')[0] : 'TA'"></span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-lg font-semibold text-gray-800 dark:text-white/90" x-text="bill.customer"></p>
+                                            <p class="truncate text-sm text-gray-500 dark:text-gray-400" x-text="(bill.table ?? bill.order ?? 'Tanpa meja') + ' · ' + bill.time"></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-end justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400" x-text="bill.items + ' item · #' + bill.no"></p>
+                                            <p x-show="bill.remaining < bill.total" class="text-xs text-gray-400" x-text="'dari ' + money(bill.total)"></p>
+                                        </div>
+                                        <p class="text-2xl font-bold text-gray-800 tabular-nums dark:text-white/90" x-text="money(bill.remaining)"></p>
+                                    </div>
+                                    <span class="flex h-12 w-full items-center justify-center rounded-xl bg-brand-500 text-base font-semibold text-white">Bayar</span>
+                                </button>
+                                <a x-bind:href="@js(route('kasir.pos')) + '?order=' + bill.id"
+                                    class="border-t border-gray-100 py-3 text-center text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-brand-600 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-white/5">+ Tambah Menu</a>
+                            </div>
+                        </template>
+                    </div>
+
+                    <p x-show="openBills.length && !filteredBills.length" x-cloak class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Tagihan tidak ditemukan.</p>
+                </div>
+            </x-common.modal>
+        @endif
+
+        {{-- ================= Modal Tambah Member cepat (dari kolom nama pelanggan) ================= --}}
+        <x-common.modal show="quickMember.open" close="if (!quickMember.saving) quickMember.open = false" max-width="md" title="Tambah Member">
+            <form class="grid grid-cols-1 gap-5" x-on:submit.prevent="saveQuickMember()">
+                <div class="flex flex-col gap-1.5">
+                    <label for="qm-name" class="text-sm font-medium text-gray-700 dark:text-gray-400">Nama Member<span class="text-error-500">*</span></label>
+                    <x-ui.input id="qm-name" x-model="quickMember.name" maxlength="100" placeholder="mis. Budi Santoso" required autocomplete="off" />
+                    <p x-show="quickMember.errors.name" x-text="quickMember.errors.name" class="text-sm text-error-500"></p>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <label for="qm-phone" class="text-sm font-medium text-gray-700 dark:text-gray-400">Nomor Telepon<span class="text-error-500">*</span></label>
+                    <x-ui.input id="qm-phone" type="tel" inputmode="tel" x-model="quickMember.phone" maxlength="20" placeholder="08xx xxxx xxxx" required autocomplete="off" />
+                    <p x-show="quickMember.errors.phone" x-text="quickMember.errors.phone" class="text-sm text-error-500"></p>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                    <label for="qm-birth" class="text-sm font-medium text-gray-700 dark:text-gray-400">Tanggal Lahir<span class="text-error-500">*</span></label>
+                    <x-ui.input id="qm-birth" type="date" x-model="quickMember.birth_date" max="{{ now()->format('Y-m-d') }}" required />
+                    <p x-show="quickMember.errors.birth_date" x-text="quickMember.errors.birth_date" class="text-sm text-error-500"></p>
+                </div>
+                <div class="flex justify-end gap-2">
+                    <x-ui.button type="button" variant="outline" x-on:click="quickMember.open = false" x-bind:disabled="quickMember.saving">Batal</x-ui.button>
+                    <x-ui.button type="submit" class="min-w-40" x-bind:disabled="quickMember.saving">
+                        <x-svg.spinner class="size-4" x-show="quickMember.saving" x-cloak />
+                        <span x-text="quickMember.saving ? 'Menyimpan…' : 'Simpan & Pilih'">Simpan &amp; Pilih</span>
+                    </x-ui.button>
+                </div>
+            </form>
+        </x-common.modal>
 
         {{-- ================= Modal Modifier & Catatan Menu ================= --}}
         <x-common.modal show="modModal.open" max-width="lg" title="Opsi & Catatan Menu">
@@ -423,4 +567,9 @@
             </div>
         </x-common.modal>
     </div>
+
+    {{-- Modal Bayar Tagihan (bersama halaman Meja) --}}
+    @if ($usesModifiers)
+        <x-main.kasir.pay-bill-modal />
+    @endif
 @endsection

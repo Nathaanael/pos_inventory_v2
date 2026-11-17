@@ -13,11 +13,6 @@
             status: 'all',
             now: Date.now(),
             detail: null,
-            payTarget: null,
-            payMethod: 'tunai',
-            payAmount: '',
-            paying: false,
-            payError: '',
             init() {
                 setInterval(() => this.now = Date.now(), 30000);
                 setInterval(() => this.refresh(), 20000);
@@ -49,47 +44,21 @@
                 if (t.occupied) this.detail = t;
                 else window.location.href = @js(route('kasir.pos')) + '?meja=' + t.id;
             },
+            /** Buka modal Bayar Tagihan bersama (komponen main.kasir.pay-bill-modal). */
             openPay(o) {
-                this.payTarget = o;
-                this.payMethod = 'tunai';
-                this.payAmount = String(Math.round(o.remaining || o.total));
-                this.payError = '';
+                this.$dispatch('pay-bill', {
+                    ...o,
+                    table: 'Meja ' + this.detail.number + (this.detail.name ? ' · ' + this.detail.name : ''),
+                });
             },
-            async submitPay() {
-                if (!this.payTarget || this.paying) return;
-                this.paying = true;
-                this.payError = '';
-                try {
-                    const url = @js(route('kasir.orders.pay', '__ID__')).replace('__ID__', this.payTarget.id);
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Accept: 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-                        },
-                        body: JSON.stringify({
-                            payment_method: this.payMethod,
-                            paid_amount: this.payMethod === 'tunai' ? Number(this.payAmount || 0) : null,
-                        }),
-                    });
-                    const data = await res.json().catch(() => null);
-                    if (data?.ok) {
-                        if (data.tables) {
-                            this.tables = data.tables;
-                            this.detail = this.tables.find((t) => t.id === this.detail?.id) ?? null;
-                        }
-                        this.payTarget = null;
-                    } else {
-                        this.payError = data?.message ?? 'Gagal memproses pembayaran.';
-                    }
-                } catch (e) {
-                    this.payError = 'Koneksi gagal. Coba lagi.';
-                } finally {
-                    this.paying = false;
-                }
+            /** Setelah lunas: perbarui denah & detail meja yang sedang terbuka. */
+            onBillPaid(data) {
+                if (!data.tables) return;
+                this.tables = data.tables;
+                this.detail = this.tables.find((t) => t.id === this.detail?.id && t.occupied) ?? null;
             },
-        }">
+        }"
+        x-on:bill-paid.window="onBillPaid($event.detail)">
         {{-- Judul + tab --}}
         <div class="mb-6 border-b border-gray-200 dark:border-gray-800">
             <h2 class="text-xl font-semibold text-gray-800 dark:text-white/90">Meja</h2>
@@ -226,18 +195,22 @@
                                 </template>
                                 <div class="flex flex-wrap gap-2 pt-1">
                                     <a x-show="o.is_open" x-bind:href="{{ \Illuminate\Support\Js::from(route('kasir.pos')) }} + '?order=' + o.id"
-                                        class="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-brand-300 hover:text-brand-600 dark:border-gray-700 dark:text-gray-300">
+                                        x-data="formLoading" x-on:click="start()" x-bind:aria-busy="loading"
+                                        class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-brand-300 hover:text-brand-600 dark:border-gray-700 dark:text-gray-300">
+                                        <x-svg.spinner class="size-3.5" x-show="loading" x-cloak />
                                         + Tambah Menu
                                     </a>
                                     <button x-show="o.is_open" type="button" x-on:click="openPay(o)"
                                         class="rounded-lg bg-brand-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-600">
                                         Bayar Tagihan
                                     </button>
-                                    <form method="POST" x-bind:action="{{ \Illuminate\Support\Js::from(route('kasir.orders.print-kot', '__ID__')) }}.replace('__ID__', o.id)">
+                                    <form method="POST" x-bind:action="{{ \Illuminate\Support\Js::from(route('kasir.orders.print-kot', '__ID__')) }}.replace('__ID__', o.id)"
+                                        x-data="formLoading" x-on:submit="start($event)">
                                         @csrf
-                                        <button type="submit"
-                                            class="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300">
-                                            Cetak KOT
+                                        <button type="submit" x-bind:disabled="loading"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-300 disabled:opacity-70 dark:border-gray-700 dark:text-gray-300">
+                                            <x-svg.spinner class="size-3.5" x-show="loading" x-cloak />
+                                            <span x-text="loading ? 'Mencetak…' : 'Cetak KOT'">Cetak KOT</span>
                                         </button>
                                     </form>
                                 </div>
@@ -251,6 +224,7 @@
 
                     <form method="POST" x-show="tables.some((t) => !t.occupied && t.id !== detail.id)"
                         x-bind:action="{{ \Illuminate\Support\Js::from(route('kasir.meja.move', '__ID__')) }}.replace('__ID__', detail.id)"
+                        x-data="formLoading" x-on:submit="start($event)"
                         class="mt-4 flex items-center gap-2 rounded-xl border border-gray-200 p-2.5 dark:border-gray-800">
                         @csrf
                         <select name="target_table_id" required
@@ -260,58 +234,33 @@
                                 <option x-bind:value="ft.id" x-text="'Meja ' + ft.number + (ft.name ? ' · ' + ft.name : '')"></option>
                             </template>
                         </select>
-                        <x-ui.button type="submit" size="sm" variant="outline">Pindah</x-ui.button>
+                        <x-ui.button type="submit" size="sm" variant="outline" x-bind:disabled="loading">
+                            <x-svg.spinner class="size-4" x-show="loading" x-cloak />
+                            <span x-text="loading ? 'Memindah…' : 'Pindah'">Pindah</span>
+                        </x-ui.button>
                     </form>
 
                     <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <x-ui.button variant="outline" x-on:click="detail = null">Tutup</x-ui.button>
-                        <x-ui.button as="a" variant="outline" x-bind:href="{{ \Illuminate\Support\Js::from(route('kasir.pos')) }} + '?meja=' + detail.id">Tambah Pesanan</x-ui.button>
-                        <form method="POST" x-bind:action="{{ \Illuminate\Support\Js::from(route('kasir.meja.release', '__ID__')) }}.replace('__ID__', detail.id)">
+                        <x-ui.button as="a" variant="outline" x-bind:href="{{ \Illuminate\Support\Js::from(route('kasir.pos')) }} + '?meja=' + detail.id"
+                            x-data="formLoading" x-on:click="start()" x-bind:aria-busy="loading">
+                            <x-svg.spinner class="size-4" x-show="loading" x-cloak />
+                            Tambah Pesanan
+                        </x-ui.button>
+                        <form method="POST" x-bind:action="{{ \Illuminate\Support\Js::from(route('kasir.meja.release', '__ID__')) }}.replace('__ID__', detail.id)"
+                            x-data="formLoading" x-on:submit="start($event)">
                             @csrf
-                            <x-ui.button type="submit" class="w-full bg-success-500 hover:bg-success-600">Kosongkan</x-ui.button>
+                            <x-ui.button type="submit" class="w-full bg-success-500 hover:bg-success-600" x-bind:disabled="loading">
+                                <x-svg.spinner class="size-4" x-show="loading" x-cloak />
+                                <span x-text="loading ? 'Mengosongkan…' : 'Kosongkan'">Kosongkan</span>
+                            </x-ui.button>
                         </form>
                     </div>
                 </div>
             </template>
         </x-common.modal>
 
-        {{-- Modal Bayar Open Bill --}}
-        <x-common.modal show="payTarget" close="payTarget = null" max-width="sm" title="Bayar Tagihan Meja">
-            <template x-if="payTarget">
-                <div class="space-y-4">
-                    <div class="rounded-xl bg-gray-50 p-3 text-sm dark:bg-white/5">
-                        <p class="font-medium text-gray-800 dark:text-white/90" x-text="payTarget.code"></p>
-                        <p class="mt-1 text-lg font-bold text-brand-600 dark:text-brand-400" x-text="money(payTarget.remaining)"></p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1.5 block text-xs font-medium text-gray-500 uppercase">Metode Pembayaran</label>
-                        <div class="grid grid-cols-3 gap-2">
-                            @foreach (\App\Models\Outbound::PAYMENT_METHODS as $key => $label)
-                                <button type="button" x-on:click="payMethod = @js($key)"
-                                    class="rounded-lg border px-2 py-2 text-xs font-medium transition"
-                                    x-bind:class="payMethod === @js($key) ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300' : 'border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-300'">
-                                    {{ ['tunai' => 'Tunai', 'debit' => 'Debit', 'qris' => 'QRIS'][$key] ?? $label }}
-                                </button>
-                            @endforeach
-                        </div>
-                    </div>
-
-                    <div x-show="payMethod === 'tunai'">
-                        <label class="mb-1.5 block text-xs font-medium text-gray-500 uppercase">Uang Diterima</label>
-                        <x-ui.input type="number" x-model="payAmount" min="0" />
-                    </div>
-
-                    <p x-show="payError" x-text="payError" class="text-xs text-error-500"></p>
-
-                    <div class="flex justify-end gap-2 pt-2">
-                        <x-ui.button type="button" variant="outline" x-on:click="payTarget = null">Batal</x-ui.button>
-                        <x-ui.button type="button" x-bind:disabled="paying" x-on:click="submitPay()">
-                            <span x-text="paying ? 'Memproses…' : 'Lunasi Tagihan'"></span>
-                        </x-ui.button>
-                    </div>
-                </div>
-            </template>
-        </x-common.modal>
+        {{-- Modal Bayar Tagihan (bersama POS) --}}
+        <x-main.kasir.pay-bill-modal />
     </div>
 @endsection

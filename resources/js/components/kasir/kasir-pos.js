@@ -23,6 +23,9 @@ export default (config = {}) => ({
     catalog: config.catalog ?? [],
     categories: config.categories ?? [],
     recent: config.recent ?? [],          // transaksi terakhir hari ini
+    openBills: config.openBills ?? [],    // Open Bill belum lunas (semua kasir) → dibayar dari POS
+    billSearch: '',
+    billsOpen: false,                     // modal daftar Open Bill
     fnb: config.fnb ?? { tables: false, takeAway: false },
     tables: config.tables ?? [],          // [{ id, number, name, occupied }]
     taxRules: config.taxRules ?? [],      // master Pajak & Biaya Layanan (modul FNB)
@@ -36,6 +39,15 @@ export default (config = {}) => ({
     payment: 'tunai',
     paid: '',
     customer: '',
+    // Member: kolom "Nama pelanggan" sekaligus pencarian member (nama / nomor HP).
+    memberId: null,
+    memberPhone: '',
+    memberResults: [],
+    memberOpen: false,
+    memberLoading: false,
+    memberIndex: -1,
+    memberTimer: null,
+    quickMember: { open: false, name: '', phone: '', birth_date: '', saving: false, errors: {} },
     notes: '',
     showNotes: false,
     discountType: 'percent',              // percent | fixed
@@ -103,6 +115,147 @@ export default (config = {}) => ({
     money(value) {
         return 'Rp' + fmt.format(Math.round(value || 0));
     },
+
+    // ---------- Member (kolom nama pelanggan) ----------
+    /** Mengetik ulang nama melepas member terpilih, lalu cari member (debounce). */
+    onCustomerInput() {
+        if (this.memberId) this.clearMemberSelection();
+        clearTimeout(this.memberTimer);
+        const q = this.customer.trim();
+        if (q.length < 2) {
+            this.memberResults = [];
+            this.memberOpen = false;
+            return;
+        }
+        this.memberLoading = true;
+        this.memberOpen = true;
+        this.memberTimer = setTimeout(() => this.searchMembers(q), 250);
+    },
+
+    async searchMembers(q) {
+        try {
+            const response = await fetch(`${config.memberSearchUrl}?q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+            const results = response.ok ? await response.json() : [];
+            if (q !== this.customer.trim()) return; // hasil untuk ketikan lama
+            this.memberResults = results;
+            this.memberIndex = results.length ? 0 : -1;
+        } catch (e) {
+            this.memberResults = [];
+        } finally {
+            this.memberLoading = false;
+        }
+    },
+
+    selectMember(member) {
+        this.customer = member.name;
+        this.memberId = member.id;
+        this.memberPhone = member.phone_label;
+        this.memberOpen = false;
+        this.memberResults = [];
+    },
+
+    clearMemberSelection() {
+        this.memberId = null;
+        this.memberPhone = '';
+        this.memberResults = [];
+        this.memberOpen = false;
+    },
+
+    /** Tombol "Tambah member" tampil bila nama yang diketik belum ada di hasil pencarian. */
+    get canAddMember() {
+        const q = this.customer.trim().toLowerCase();
+        return q.length >= 2 && !this.memberLoading && !this.memberResults.some((m) => m.name.toLowerCase() === q);
+    },
+
+    memberKey(e) {
+        if (!this.memberOpen) return;
+        const max = this.memberResults.length - 1;
+        if (e.key === 'ArrowDown') { e.preventDefault(); this.memberIndex = Math.min(max, this.memberIndex + 1); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); this.memberIndex = Math.max(0, this.memberIndex - 1); }
+        if (e.key === 'Escape') { e.preventDefault(); this.memberOpen = false; }
+        if (e.key === 'Enter' && this.memberResults[this.memberIndex]) {
+            e.preventDefault();
+            this.selectMember(this.memberResults[this.memberIndex]);
+        }
+    },
+
+    /** Buka form tambah member cepat; ketikan berupa angka diisi ke nomor HP, selain itu ke nama. */
+    openQuickMember() {
+        const typed = this.customer.trim();
+        const isPhone = /^\+?[\d\s-]{6,}$/.test(typed);
+        this.quickMember = { open: true, name: isPhone ? '' : typed, phone: isPhone ? typed : '', birth_date: '', saving: false, errors: {} };
+        this.memberOpen = false;
+    },
+
+    async saveQuickMember() {
+        if (this.quickMember.saving) return;
+        this.quickMember.saving = true;
+        this.quickMember.errors = {};
+        try {
+            const response = await fetch(config.memberStoreUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({
+                    name: this.quickMember.name,
+                    phone: this.quickMember.phone,
+                    birth_date: this.quickMember.birth_date,
+                }),
+            });
+            const data = await response.json().catch(() => null);
+            if (response.status === 422) {
+                this.quickMember.errors = Object.fromEntries(Object.entries(data?.errors ?? {}).map(([k, v]) => [k, v[0]]));
+                return;
+            }
+            if (!response.ok || !data?.member) {
+                toast('error', data?.message ?? 'Gagal menambah member.');
+                return;
+            }
+            this.selectMember(data.member);
+            this.quickMember.open = false;
+            toast('success', data.message, data.member.name + ' dipilih sebagai pelanggan.');
+        } catch (e) {
+            toast('error', 'Koneksi ke server gagal. Coba lagi.');
+        } finally {
+            this.quickMember.saving = false;
+        }
+    },
+
+    // ---------- Open Bill belum lunas ----------
+    get filteredBills() {
+        const q = this.billSearch.trim().toLowerCase();
+        if (!q) return this.openBills;
+        return this.openBills.filter((b) =>
+            [b.customer, b.table, b.order, b.code].some((v) => (v ?? '').toLowerCase().includes(q)));
+    },
+
+    get openBillsTotal() {
+        return this.openBills.reduce((sum, b) => sum + (b.remaining || 0), 0);
+    },
+
+    openBillsModal() {
+        this.billSearch = '';
+        this.billsOpen = true;
+    },
+
+    /** Tutup daftar lalu buka modal Bayar Tagihan bersama (komponen main.kasir.pay-bill-modal). */
+    payBill(bill) {
+        this.billsOpen = false;
+        this.$dispatch('pay-bill', { ...bill, table: bill.table ?? bill.order });
+    },
+
+    /** Setelah tagihan lunas (event 'bill-paid'): perbarui daftar & status meja. */
+    onBillPaid(data) {
+        if (data.open_bills) this.openBills = data.open_bills;
+        if (data.recent) this.recent = data.recent;
+        if (data.tables) {
+            this.tables = data.tables.map((t) => ({ id: t.id, number: t.number, name: t.name, occupied: t.occupied }));
+        }
+    },
+
 
     // ---------- cart ----------
     lineUid(id, modIds = [], notes = '') {
@@ -255,6 +408,7 @@ export default (config = {}) => ({
         this.cart = [];
         this.paid = '';
         this.customer = '';
+        this.clearMemberSelection();
         this.notes = '';
         this.showNotes = false;
         this.discountType = 'percent';
@@ -392,6 +546,7 @@ export default (config = {}) => ({
     },
 
     shortcut(e) {
+        if (this.billsOpen || this.quickMember.open) return; // Esc ditangani modal
         if (this.modModal.open) {
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -460,6 +615,7 @@ export default (config = {}) => ({
                     payment_method: asOpenBill ? null : this.payment,
                     paid_amount: !asOpenBill && this.payment === 'tunai' ? this.paidNumber : null,
                     customer_name: this.customer || null,
+                    member_id: this.memberId,
                     notes: this.notes || null,
                     sale_id: this.saleId,
                     order_type: this.hasFnb ? this.orderType : null,
@@ -477,6 +633,7 @@ export default (config = {}) => ({
                 if (result.catalog) this.catalog = result.catalog;
                 if (result.recent) this.recent = result.recent;
                 if (result.tables) this.tables = result.tables;
+                if (result.open_bills) this.openBills = result.open_bills;
                 this.resetSale();
                 this.$nextTick(() => this.$refs.search?.focus());
             } else {
