@@ -419,7 +419,7 @@ class KasirController extends Controller
             ->where('item_type', '!=', Item::TYPE_INGREDIENT)
             ->with($with)
             ->orderBy('name')
-            ->get(['id', 'code', 'barcode', 'name', 'category_id', 'unit_id', 'item_type', 'track_stock', 'harga_jual_retail', 'harga_jual_grosir', 'current_stock', 'image', 'tax_rate', 'tax_method'])
+            ->get(['id', 'code', 'barcode', 'name', 'category_id', 'unit_id', 'item_type', 'track_stock', 'recipe_incomplete', 'harga_jual_retail', 'harga_jual_grosir', 'current_stock', 'image', 'tax_rate', 'tax_method'])
             ->map(fn (Item $item) => [
                 'id' => $item->id,
                 'code' => $item->code,
@@ -429,7 +429,8 @@ class KasirController extends Controller
                 'unit' => $item->unit?->name,
                 'retail' => (float) $item->harga_jual_retail,
                 'grosir' => (float) $item->harga_jual_grosir,
-                'stock' => $item->usesRecipeStock() ? $item->availablePortions() : (int) floor((float) $item->current_stock),
+                'recipe_incomplete' => $usesRecipes && $item->isRecipeIncomplete(),
+                'stock' => ($usesRecipes && $item->isRecipeIncomplete()) ? 0 : ($item->usesRecipeStock() ? $item->availablePortions() : (int) floor((float) $item->current_stock)),
                 'image' => $showImages && $item->image ? Storage::disk('public')->url($item->image) : null,
                 // Pajak barang (null = ikut master). Hanya dipakai bila modul memakai pajak.
                 'tax_rate' => $usesTaxes && $item->tax_rate !== null ? (float) $item->tax_rate : null,
@@ -741,6 +742,9 @@ class KasirController extends Controller
             $item = $items->get($id);
             if (! $item) {
                 return 'Ada barang yang sudah tidak aktif. Muat ulang halaman.';
+            }
+            if (StoreSetting::usesRecipes() && $item->isRecipeIncomplete()) {
+                return "Resep menu {$item->name} belum lengkap. Lengkapi resep di Master Barang sebelum menjual.";
             }
             $available = $item->usesRecipeStock() ? $item->availablePortions() : (float) $item->current_stock;
             if ($available + 0.0001 < $totalQty) {

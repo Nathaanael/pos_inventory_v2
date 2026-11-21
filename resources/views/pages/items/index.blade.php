@@ -73,16 +73,65 @@
         }">
         <x-common.table-card title="Daftar Master Barang" :paginator="$items">
             <x-slot:filters>
-                @if ($hasBrand)
-                    <x-common.form.select name="brand_id" class="h-10 sm:w-40" :value="request('brand_id')" placeholder="Semua merk"
-                        :options="$brandOptions" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter merk" />
-                @endif
-                @if ($usesSuppliers)
-                    <x-common.form.select name="supplier" class="h-10 sm:w-44" :value="request('supplier')" placeholder="Semua supplier"
-                        :options="$supplierOptions" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter supplier" />
-                @endif
-                <x-common.form.select name="is_active" class="h-10 sm:w-36" :value="request('is_active')" placeholder="Semua status"
-                    :options="['1' => 'Aktif', '0' => 'Tidak Aktif']" x-data x-on:change="$el.form.requestSubmit()" aria-label="Filter status aktif" />
+                @php
+                    $activeFilterCount = collect([
+                        $hasBrand ? request('brand_id') : null,
+                        $usesSuppliers ? request('supplier') : null,
+                        request('is_active'),
+                        ($usesRecipes ?? false) ? request('recipe_status') : null,
+                    ])->filter(fn ($v) => filled($v))->count();
+                @endphp
+                <div class="relative" x-data="{ filterOpen: false }" x-on:click.outside="filterOpen = false" x-on:keydown.escape.window="filterOpen = false">
+                    <x-ui.button type="button" variant="outline" class="h-10 gap-2" x-on:click="filterOpen = !filterOpen">
+                        <svg class="size-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
+                        </svg>
+                        <span>Filter</span>
+                        @if ($activeFilterCount > 0)
+                            <span class="flex size-5 items-center justify-center rounded-full bg-brand-500 text-[11px] font-semibold text-white">{{ $activeFilterCount }}</span>
+                        @endif
+                    </x-ui.button>
+
+                    <div x-show="filterOpen" x-cloak x-transition
+                        class="absolute end-0 z-50 mt-2 w-72 rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900">
+                        <div class="space-y-3">
+                            @if ($hasBrand)
+                                <div>
+                                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Merk</label>
+                                    <x-common.form.select name="brand_id" class="h-10 w-full" :value="request('brand_id')" placeholder="Semua merk"
+                                        :options="$brandOptions" aria-label="Filter merk" />
+                                </div>
+                            @endif
+                            @if ($usesSuppliers)
+                                <div>
+                                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Supplier</label>
+                                    <x-common.form.select name="supplier" class="h-10 w-full" :value="request('supplier')" placeholder="Semua supplier"
+                                        :options="$supplierOptions" aria-label="Filter supplier" />
+                                </div>
+                            @endif
+                            <div>
+                                <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Status Aktif</label>
+                                <x-common.form.select name="is_active" class="h-10 w-full" :value="request('is_active')" placeholder="Semua status"
+                                    :options="['1' => 'Aktif', '0' => 'Tidak Aktif']" aria-label="Filter status aktif" />
+                            </div>
+                            @if ($usesRecipes ?? false)
+                                <div>
+                                    <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Status Resep</label>
+                                    <x-common.form.select name="recipe_status" class="h-10 w-full" :value="request('recipe_status')" placeholder="Semua resep"
+                                        :options="['incomplete' => 'Resep Belum Lengkap']" aria-label="Filter resep" />
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                            <a href="{{ route('items.index', request('q') ? ['q' => request('q')] : []) }}"
+                                class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5">
+                                Reset
+                            </a>
+                            <x-ui.button type="submit" size="sm">Terapkan</x-ui.button>
+                        </div>
+                    </div>
+                </div>
             </x-slot:filters>
 
             <x-slot:actions>
@@ -118,7 +167,17 @@
                     <tr class="table-row cursor-pointer" x-on:click="if (! $event.target.closest('button, a, [role=menu]')) {{ $detailCall }}">
                         <td class="table-td whitespace-nowrap">{{ $item->code }}</td>
                         <td class="table-td whitespace-nowrap">{{ $item->barcode ?: '-' }}</td>
-                        <td class="table-td font-medium text-gray-800 dark:text-white/90">{{ $item->name }}</td>
+                        <td class="table-td font-medium text-gray-800 dark:text-white/90">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span>{{ $item->name }}</span>
+                                @if (($usesRecipes ?? false) && $item->isRecipeIncomplete())
+                                    <span class="inline-flex items-center gap-1 rounded-md bg-warning-100 px-2 py-0.5 text-xs font-medium text-warning-800 dark:bg-warning-500/20 dark:text-warning-300" title="Lengkapi komposisi bahan baku di halaman Ubah">
+                                        <svg class="size-3.5 shrink-0 stroke-current" viewBox="0 0 24 24" fill="none" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
+                                        Resep belum lengkap
+                                    </span>
+                                @endif
+                            </div>
+                        </td>
                         @if ($usesSuppliers)
                         <td class="table-td">
                             @if ($suppliers->isNotEmpty())
@@ -137,9 +196,19 @@
                             @endif
                         </td>
                         <td class="table-td whitespace-nowrap">
-                            <span @class(['font-medium', 'text-error-500' => $item->is_active && $item->current_stock <= $item->min_stock])>
-                                {{ $fmtQty($item->current_stock) }}
-                            </span>
+                            @if (($usesRecipes ?? false) && $item->isRecipeIncomplete())
+                                <span class="text-sm text-gray-400">-</span>
+                            @elseif (($usesRecipes ?? false) && $item->usesRecipeStock())
+                                @php $portions = $item->availablePortions(); @endphp
+                                <span @class(['font-medium', 'text-error-500' => $item->is_active && $portions <= 0])>
+                                    {{ $portions }} porsi
+                                </span>
+                                <span class="block text-[11px] text-gray-400">Dari resep</span>
+                            @else
+                                <span @class(['font-medium', 'text-error-500' => $item->is_active && $item->current_stock <= $item->min_stock])>
+                                    {{ $fmtQty($item->current_stock) }}
+                                </span>
+                            @endif
                         </td>
                         <td class="table-td whitespace-nowrap">
                             @if ($badge)

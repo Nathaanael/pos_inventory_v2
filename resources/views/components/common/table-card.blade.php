@@ -23,7 +23,7 @@
 <x-ui.card {{ $attributes->merge(['class' => 'w-full max-w-full min-w-0 gap-0 overflow-hidden rounded-2xl border border-gray-200 bg-white p-0 sm:p-0 dark:border-gray-800 dark:bg-white/3']) }}>
     <!-- Table Header Controls -->
     <div class="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between sm:px-6">
-        <div class="min-w-0">
+        <div class="min-w-0 shrink-0">
             @if ($title)
                 <x-ui.card.title class="text-lg font-semibold text-gray-800 dark:text-white/90">{{ $title }}</x-ui.card.title>
             @endif

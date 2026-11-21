@@ -268,6 +268,7 @@ export default (config = {}) => ({
     },
 
     add(item, amount = 1) {
+        if (item.recipe_incomplete) return toast('warning', `Resep ${item.name} belum lengkap. Lengkapi di Master Barang.`);
         if (item.stock <= 0) return toast('warning', `${item.name} stoknya habis`);
         if (this.usesModifiers && (item.modifier_groups?.length ?? 0) > 0) {
             return this.openModifierModal(item);

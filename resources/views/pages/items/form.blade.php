@@ -280,6 +280,7 @@
                         <div class="space-y-4" x-data="{
                                 itemType: @js(old('item_type', $item->item_type ?? \App\Models\Item::TYPE_MENU)),
                                 trackStock: @js((bool) old('track_stock', $item->exists ? $item->track_stock : false)),
+                                recipeIncomplete: @js((bool) old('recipe_incomplete', $item->exists ? $item->recipe_incomplete : false)),
                                 rows: @js($recipeRows),
                                 addRow() { this.rows.push({ ingredient_item_id: '', quantity: '', unit_id: '' }); },
                             }">
@@ -319,6 +320,12 @@
                                 @if ($ingredientOptions->isEmpty())
                                     <p class="text-xs text-warning-600 dark:text-warning-400">Belum ada item bertipe <strong>Bahan Baku</strong>. Buat item bahan baku terlebih dahulu.</p>
                                 @endif
+
+                                <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-warning-200 bg-warning-50/70 px-3.5 py-2.5 text-xs text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-300">
+                                    <input type="checkbox" name="recipe_incomplete" value="1" x-model="recipeIncomplete"
+                                        class="size-4 rounded border-warning-400 text-warning-500" />
+                                    <span><strong>Tandai resep belum lengkap (lengkapi nanti)</strong> — menu tetap bisa disimpan, namun belum bisa dijual di Kasir sampai resep dilengkapi.</span>
+                                </label>
 
                                 <template x-for="(row, idx) in rows" :key="idx">
                                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_130px_auto] items-center">

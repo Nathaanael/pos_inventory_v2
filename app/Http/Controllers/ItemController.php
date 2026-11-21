@@ -27,10 +27,17 @@ class ItemController extends Controller
         $brandId = $request->query('brand_id');
         $supplierId = $request->query('supplier');
         $active = $request->query('is_active');
+        $recipeStatus = $request->query('recipe_status');
         $hasBrand = StoreSetting::hasFeature(Feature::Brand);
+        $usesRecipes = StoreSetting::usesRecipes();
+
+        $with = ['suppliers', 'itemSuppliers', 'latestMovement'];
+        if ($usesRecipes) {
+            $with[] = 'recipe.ingredients.ingredientItem';
+        }
 
         $items = Item::query()
-            ->with(['suppliers', 'itemSuppliers', 'latestMovement'])
+            ->with($with)
             ->when($search !== '', fn ($q) => $q->where(fn ($q) => $q
                 ->where('code', 'like', "%{$search}%")
                 ->orWhere('barcode', 'like', "%{$search}%")
@@ -39,6 +46,10 @@ class ItemController extends Controller
             ->when($hasBrand && filled($brandId), fn ($q) => $q->where('brand_id', $brandId))
             ->when(filled($supplierId), fn ($q) => $q->whereHas('itemSuppliers', fn ($s) => $s->where('supplier_id', $supplierId)))
             ->when(in_array($active, ['1', '0'], true), fn ($q) => $q->where('is_active', $active === '1'))
+            ->when($usesRecipes && $recipeStatus === 'incomplete', fn ($q) => $q
+                ->where('item_type', Item::TYPE_MENU)
+                ->where('track_stock', false)
+                ->where(fn ($sub) => $sub->where('recipe_incomplete', true)->orDoesntHave('recipe')))
             ->latest('id')
             ->paginate(10)
             ->withQueryString();
@@ -51,6 +62,7 @@ class ItemController extends Controller
             'brandOptions' => $hasBrand ? Brand::orderBy('name')->pluck('name', 'id') : collect(),
             'supplierOptions' => Supplier::where('is_active', true)->orderBy('name')->pluck('name', 'id'),
             'usesSuppliers' => StoreSetting::usesSuppliers(),
+            'usesRecipes' => $usesRecipes,
         ]);
     }
 
@@ -207,7 +219,10 @@ class ItemController extends Controller
 
     private function stats(): array
     {
-        $lowStock = Item::where('is_active', true)->whereColumn('current_stock', '<=', 'min_stock')->count();
+        $lowStock = Item::where('is_active', true)
+            ->where('track_stock', true)
+            ->whereColumn('current_stock', '<=', 'min_stock')
+            ->count();
 
         return [
             'total' => Item::count(),
@@ -356,6 +371,12 @@ class ItemController extends Controller
             $attributes['track_stock'] = $attributes['item_type'] === Item::TYPE_MENU
                 ? $request->boolean('track_stock', false)
                 : true;
+            $attributes['recipe_incomplete'] = $attributes['item_type'] === Item::TYPE_MENU && ! $attributes['track_stock']
+                ? ($request->boolean('recipe_incomplete', false) || empty(array_filter(
+                    $validated['recipe_ingredients'] ?? [],
+                    fn ($row) => ! empty($row['ingredient_item_id']) && (float) ($row['quantity'] ?? 0) > 0
+                )))
+                : false;
         }
 
         $suppliers = array_map(fn ($row) => [

@@ -152,3 +152,54 @@ it('rejects sale when recipe ingredient stock is insufficient', function () {
 
     $res->assertOk()->assertJson(['ok' => false]);
 });
+
+it('marks menu without complete recipe as incomplete, blocks POS sale, and displays recipe status on items index', function () {
+    ['kasir' => $kasir, 'table' => $table] = setupRecipeStore();
+
+    $admin = User::create([
+        'name' => 'Admin Resep',
+        'email' => 'admin-resep@fnb.test',
+        'password' => bcrypt('password'),
+        'role' => 'admin',
+        'is_active' => true,
+        'must_reset_password' => false,
+    ]);
+
+    $cat = Category::first();
+    $cup = Unit::where('name', 'cup')->first();
+
+    // Menu baru tanpa bahan baku
+    $draftMenu = Item::create([
+        'code' => 'MNU-DRAFT',
+        'name' => 'Cappuccino Draft',
+        'item_type' => Item::TYPE_MENU,
+        'track_stock' => false,
+        'recipe_incomplete' => true,
+        'category_id' => $cat->id,
+        'unit_id' => $cup->id,
+        'harga_beli' => 0,
+        'harga_jual_retail' => 25000,
+        'current_stock' => 0,
+        'min_stock' => 0,
+        'is_active' => true,
+    ]);
+
+    expect($draftMenu->isRecipeIncomplete())->toBeTrue();
+    expect($draftMenu->availablePortions())->toBe(0);
+
+    // Opsi A: Kasir tidak bisa menjual menu dengan resep belum lengkap
+    $res = $this->actingAs($kasir)->postJson(route('kasir.checkout'), [
+        'lines' => [['id' => $draftMenu->id, 'qty' => 1]],
+        'order_type' => 'dine_in',
+        'table_id' => $table->id,
+        'payment_method' => 'qris',
+        'sale_id' => 'recipe-incomplete-1',
+    ]);
+    $res->assertOk()->assertJson(['ok' => false]);
+
+    // Halaman /items menampilkan badge "Resep belum lengkap" dan estimasi porsi untuk menu lengkap
+    $this->actingAs($admin)->get(route('items.index'))
+        ->assertOk()
+        ->assertSee('Resep belum lengkap')
+        ->assertSee('10 porsi');
+});

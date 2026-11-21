@@ -28,6 +28,7 @@ class Item extends Model
             'current_stock' => 'float',
             'min_stock' => 'float',
             'track_stock' => 'boolean',
+            'recipe_incomplete' => 'boolean',
             'is_active' => 'boolean',
         ];
     }
@@ -104,21 +105,35 @@ class Item extends Model
     public function hasRecipe(): bool
     {
         if ($this->relationLoaded('recipe')) {
-            return $this->recipe !== null;
+            return $this->recipe !== null && $this->recipe->ingredients->isNotEmpty();
         }
 
-        return $this->recipe()->exists();
+        return $this->recipe()->whereHas('ingredients')->exists();
+    }
+
+    /** Menu berbasis resep yang bahannya masih kosong atau ditandai belum lengkap. */
+    public function isRecipeIncomplete(): bool
+    {
+        if ($this->item_type !== self::TYPE_MENU || $this->track_stock) {
+            return false;
+        }
+
+        return (bool) $this->recipe_incomplete || ! $this->hasRecipe();
     }
 
     /** Menu yang diproduksi on-demand dari resep (stok dipotong dari bahan baku, bukan stok menu). */
     public function usesRecipeStock(): bool
     {
-        return ! $this->track_stock && $this->hasRecipe();
+        return $this->item_type === self::TYPE_MENU && ! $this->track_stock && $this->hasRecipe();
     }
 
     /** Hitung estimasi porsi tersedia berdasarkan stok bahan baku di resep. */
     public function availablePortions(): int
     {
+        if ($this->isRecipeIncomplete()) {
+            return 0;
+        }
+
         if (! $this->usesRecipeStock()) {
             return (int) floor((float) $this->current_stock);
         }

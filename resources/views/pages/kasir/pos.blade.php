@@ -115,6 +115,10 @@
                             </template>
                             <span x-show="qtyOf(item.id) > 0" x-text="qtyOf(item.id)"
                                 class="absolute end-2 top-2 flex min-w-6 items-center justify-center rounded-full bg-brand-500 px-1.5 py-0.5 text-xs font-bold text-white"></span>
+                            <span x-show="item.recipe_incomplete"
+                                class="absolute inset-x-2 bottom-2 rounded-md bg-warning-500/95 px-2 py-0.5 text-center text-[11px] font-semibold text-white">
+                                Resep belum lengkap
+                            </span>
                         </div>
                         <span class="text-xs text-gray-500 dark:text-gray-400" x-text="categoryName(item.category_id)"></span>
                         <span class="line-clamp-2 min-h-10 text-sm font-semibold text-gray-800 dark:text-white/90" x-text="item.name"></span>
