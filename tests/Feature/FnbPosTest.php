@@ -227,8 +227,24 @@ it('allows admin to create modifier groups', function () {
     $this->actingAs($admin)->get(route('modifiers.index'))->assertOk();
     $this->actingAs($admin)->get(route('kasir.meja'))->assertOk();
     $this->actingAs($admin)->get(route('items.index'))->assertOk();
+    $this->actingAs($admin)->get(route('items.create'))->assertOk();
     $this->actingAs($admin)->get(route('items.show', $item))->assertOk();
     $this->actingAs($admin)->get(route('items.history', $item))->assertOk();
+
+    // Quick-add JSON endpoints from /items/create
+    $catRes = $this->actingAs($admin)->postJson(route('categories.store'), ['name' => 'Snack'])
+        ->assertOk()->assertJson(['ok' => true, 'item' => ['name' => 'Snack']]);
+    $this->actingAs($admin)->postJson(route('categories.store'), ['name' => 'Keripik', 'parent_id' => $catRes->json('item.id')])
+        ->assertOk()->assertJson(['ok' => true, 'item' => ['name' => 'Keripik']]);
+    $this->actingAs($admin)->postJson(route('units.store'), ['name' => 'Botol'])
+        ->assertOk()->assertJson(['ok' => true, 'item' => ['name' => 'Botol']]);
+    $this->actingAs($admin)->postJson(route('modifiers.store'), [
+        'name' => 'Sajian',
+        'max_select' => 1,
+        'is_required' => true,
+        'is_active' => true,
+        'modifiers' => [['name' => 'Ice', 'price_delta' => 0, 'is_active' => true]],
+    ])->assertOk()->assertJson(['ok' => true, 'item' => ['name' => 'Sajian']]);
 
     $response = $this->actingAs($admin)->post(route('modifiers.store'), [
         'name' => 'Ukuran Gelas',

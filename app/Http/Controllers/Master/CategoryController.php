@@ -34,9 +34,13 @@ class CategoryController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|\Illuminate\Http\JsonResponse
     {
-        Category::create($this->validated($request));
+        $category = Category::create($this->validated($request));
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'item' => ['id' => $category->id, 'name' => $category->name]]);
+        }
 
         return $this->back($request, 'Berhasil ditambah');
     }

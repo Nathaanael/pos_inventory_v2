@@ -45,9 +45,13 @@ class UnitController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|\Illuminate\Http\JsonResponse
     {
-        Unit::create($this->validated($request));
+        $unit = Unit::create($this->validated($request));
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'item' => ['id' => $unit->id, 'name' => $unit->name]]);
+        }
 
         return back()
             ->with('success', 'Berhasil ditambah')

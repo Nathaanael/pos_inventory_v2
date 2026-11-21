@@ -3,9 +3,10 @@
 
 @php
     $rupiah = fn ($value) => 'Rp '.number_format((float) $value, 0, ',', '.');
+    $fmtQty = fn ($value) => rtrim(rtrim(number_format((float) $value, 4, ',', '.'), '0'), ',');
 
     // Badge "Aktivitas Terakhir" (hanya pergerakan dalam 24 jam terakhir), sama seperti versi Filament.
-    $activity = function ($item) {
+    $activity = function ($item) use ($fmtQty) {
         $movement = $item->latestMovement;
         if (! $movement || now()->diffInHours($movement->created_at, true) > 24) {
             return null;
@@ -17,17 +18,21 @@
             'return_in' => 'Return In',
             'return_out' => 'Retur',
             'adjustment' => 'Adjustment',
+            'waste' => 'Waste',
+            'void' => 'Void',
             default => ucfirst($movement->type),
         };
         $color = match ($movement->type) {
             'inbound', 'return_in' => 'success',
             'outbound' => 'warning',
-            'return_out' => 'error',
+            'return_out', 'void' => 'error',
             'adjustment' => 'info',
             default => 'gray',
         };
 
-        return ['label' => "{$label} ({$movement->quantity})", 'color' => $color];
+        $qtyText = ($movement->quantity > 0 ? '+' : '').$fmtQty($movement->quantity);
+
+        return ['label' => "{$label} ({$qtyText})", 'color' => $color];
     };
 @endphp
 
@@ -133,7 +138,7 @@
                         </td>
                         <td class="table-td whitespace-nowrap">
                             <span @class(['font-medium', 'text-error-500' => $item->is_active && $item->current_stock <= $item->min_stock])>
-                                {{ number_format($item->current_stock, 0, ',', '.') }}
+                                {{ $fmtQty($item->current_stock) }}
                             </span>
                         </td>
                         <td class="table-td whitespace-nowrap">
@@ -149,7 +154,7 @@
                                 <x-ui.dropdown-menu.item x-on:click="load({{ Js::from(route('items.history', $item)) }}, 'historyOpen', {{ Js::from('Histori Aktivitas: '.$item->name) }})">
                                     <x-svg.time /> Histori
                                 </x-ui.dropdown-menu.item>
-                                <x-ui.dropdown-menu.item x-on:click="{{ $detailCall }}">
+                                <x-ui.dropdown-menu.item x-on:click="load({{ Js::from(route('items.show', $item)) }}, 'detailOpen', {{ Js::from($item->name) }})">
                                     <x-svg.eye /> Lihat
                                 </x-ui.dropdown-menu.item>
                                 <x-ui.dropdown-menu.item to="{{ route('items.edit', $item) }}">

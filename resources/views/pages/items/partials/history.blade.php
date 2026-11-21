@@ -1,11 +1,13 @@
 {{-- Isi modal "Histori Aktivitas" (10 pergerakan stok terakhir). Dimuat lewat fetch dari ItemController@history. --}}
 @php
+    $fmtQty = fn ($value) => rtrim(rtrim(number_format((float) $value, 4, ',', '.'), '0'), ',');
     $types = [
         'inbound' => ['Inbound', 'success'],
         'return_in' => ['Return In', 'success'],
         'outbound' => ['Outbound', 'warning'],
         'return_out' => ['Retur', 'error'],
         'void' => ['Void', 'error'],
+        'waste' => ['Waste', 'gray'],
         'adjustment' => ['Adjustment', 'info'],
     ];
 @endphp
@@ -29,9 +31,9 @@
                         <td class="table-td"><x-ui.badge size="sm" :color="$color">{{ $label }}</x-ui.badge></td>
                         <td class="table-td">{{ $movement->notes ?: '-' }}</td>
                         <td @class(['table-td text-end font-semibold', 'text-success-600 dark:text-success-500' => $movement->quantity > 0, 'text-error-600 dark:text-error-500' => $movement->quantity <= 0])>
-                            {{ $movement->quantity > 0 ? '+' : '' }}{{ $movement->quantity }}
+                            {{ $movement->quantity > 0 ? '+' : '' }}{{ $fmtQty($movement->quantity) }}
                         </td>
-                        <td class="table-td text-end font-semibold text-gray-800 dark:text-white/90">{{ $movement->stock_after }}</td>
+                        <td class="table-td text-end font-semibold text-gray-800 dark:text-white/90">{{ $fmtQty($movement->stock_after) }}</td>
                     </tr>
                 @empty
                     <tr>

@@ -33,11 +33,11 @@ class ModifierGroupController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|\Illuminate\Http\JsonResponse
     {
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($data) {
+        $group = DB::transaction(function () use ($data) {
             $group = ModifierGroup::create($data['group']);
             foreach ($data['modifiers'] as $index => $mod) {
                 $group->modifiers()->create([
@@ -45,7 +45,13 @@ class ModifierGroupController extends Controller
                     'sort_order' => $index,
                 ]);
             }
+
+            return $group;
         });
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'item' => ['id' => $group->id, 'name' => $group->name]]);
+        }
 
         return back()
             ->with('success', 'Berhasil ditambah')
