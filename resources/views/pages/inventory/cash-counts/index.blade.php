@@ -28,7 +28,10 @@
                         <div class="flex flex-col gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
-                                    <p class="truncate font-semibold text-gray-800 dark:text-white/90">{{ $shift->user?->name ?? '-' }}</p>
+                                    <p class="truncate font-semibold text-gray-800 dark:text-white/90">{{ $shift->label() }}</p>
+                                    @if (filled($shift->name))
+                                        <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ $shift->members->pluck('name')->implode(', ') ?: 'Belum ada kasir' }}</p>
+                                    @endif
                                     <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
                                         Buka {{ $shift->opened_at->format('d/m/Y H:i') }} · berjalan {{ $shift->opened_at->locale('id')->diffForHumans(null, \Carbon\CarbonInterface::DIFF_ABSOLUTE) }}
                                     </p>
@@ -118,7 +121,7 @@
                             <a href="{{ route('cash-counts.show', $count) }}" class="hover:text-brand-500">{{ $count->code }}</a>
                         </td>
                         <td class="table-td whitespace-nowrap">{{ $count->counted_at->format('d/m/Y H:i') }}</td>
-                        <td class="table-td">{{ $count->shift?->user?->name ?? '-' }}</td>
+                        <td class="table-td">{{ $count->shift?->label() ?? '-' }}</td>
                         <td class="table-td">{{ CashCount::TYPES[$count->type] ?? $count->type }}</td>
                         <td class="table-td whitespace-nowrap">{{ $money($count->expected_cash) }}</td>
                         <td class="table-td whitespace-nowrap">{{ $money($count->actual_cash) }}</td>

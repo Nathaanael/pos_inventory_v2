@@ -53,8 +53,9 @@
             <x-common.component-card title="Rincian Uang di Sistem" desc="Angka saat hitung kas dilakukan.">
                 <dl class="divide-y divide-gray-100 text-sm dark:divide-gray-800">
                     @foreach ([
-                        'Kasir' => $shift?->user?->name ?? '-',
-                        'Shift' => $shift ? $shift->opened_at->format('d/m/Y H:i').' – '.($shift->closed_at?->format('d/m/Y H:i') ?? 'berjalan') : '-',
+                        'Shift' => $shift?->label() ?? '-',
+                        'Kasir' => $shift?->members->pluck('name')->implode(', ') ?: '-',
+                        'Waktu Shift' => $shift ? $shift->opened_at->format('d/m/Y H:i').' – '.($shift->closed_at?->format('d/m/Y H:i') ?? 'berjalan') : '-',
                         'Dihitung Oleh' => $count->countedBy?->name ?? '-',
                     ] as $label => $text)
                         <div class="flex justify-between gap-4 py-2.5">

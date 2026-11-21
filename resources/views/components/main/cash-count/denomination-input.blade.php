@@ -34,22 +34,28 @@
             class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors">Total Langsung</button>
     </div>
 
-    {{-- Per pecahan --}}
-    <div x-show="mode === 'pecahan'" class="space-y-4">
+    {{-- Per pecahan. Jumlah kolom mengikuti lebar WADAH (container query), bukan lebar layar,
+         agar tetap rapi di kartu sempit (mis. Tutup Shift di samping daftar kasir). --}}
+    <div x-show="mode === 'pecahan'" class="@container space-y-4">
         @foreach ($groups as $groupLabel => $values)
             <div>
                 <p class="mb-2 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">{{ $groupLabel }}</p>
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {{-- Kiri–kanan (2 kolom; 3 kolom bila wadah lebar). Nominal kecil di atas, isian jumlah di bawah. --}}
+                <div class="grid grid-cols-2 gap-2 @2xl:grid-cols-3">
                     @foreach ($values as $value)
                         <label for="{{ $idPrefix }}_d{{ $value }}"
-                            class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
-                            <span class="w-20 shrink-0 text-sm font-medium text-gray-800 dark:text-white/90">{{ CashDenominations::label($value) }}</span>
-                            <span class="text-sm text-gray-400">×</span>
+                            class="flex min-w-0 flex-col gap-1.5 rounded-lg border px-3 py-2 transition-colors"
+                            x-bind:class="(parseInt(qty[{{ $value }}]) || 0) > 0 ? 'border-brand-300 bg-brand-50/40 dark:border-brand-500/40 dark:bg-brand-500/5' : 'border-gray-200 dark:border-gray-800'">
+                            <span class="flex items-baseline justify-between gap-2">
+                                <span class="text-xs font-medium text-gray-500 tabular-nums dark:text-gray-400">{{ CashDenominations::label($value) }}</span>
+                                <span class="min-w-0 truncate text-xs tabular-nums"
+                                    x-bind:class="(parseInt(qty[{{ $value }}]) || 0) > 0 ? 'font-medium text-gray-800 dark:text-white/90' : 'text-gray-400 dark:text-gray-500'"
+                                    x-text="rupiah({{ $value }} * (parseInt(qty[{{ $value }}]) || 0))"></span>
+                            </span>
                             <input id="{{ $idPrefix }}_d{{ $value }}" type="number" min="0" step="1" inputmode="numeric" placeholder="0"
                                 name="denominations[{{ $value }}]" x-model="qty[{{ $value }}]" x-bind:disabled="mode !== 'pecahan'"
-                                class="h-9 w-20 rounded-md border border-gray-300 bg-transparent px-2 text-end text-sm text-gray-800 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:text-white/90" />
-                            <span class="ms-auto text-end text-xs text-gray-500 tabular-nums dark:text-gray-400"
-                                x-text="rupiah({{ $value }} * (parseInt(qty[{{ $value }}]) || 0))"></span>
+                                aria-label="Jumlah lembar/keping {{ CashDenominations::label($value) }}"
+                                class="h-9 w-full min-w-0 [appearance:textfield] rounded-md border border-gray-300 bg-white px-2 text-center text-sm font-medium text-gray-800 tabular-nums placeholder:font-normal placeholder:text-gray-300 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-gray-600 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                         </label>
                     @endforeach
                 </div>

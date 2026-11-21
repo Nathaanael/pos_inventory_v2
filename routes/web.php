@@ -3,6 +3,7 @@
 use App\Http\Controllers\App\ExportController;
 use App\Http\Controllers\App\NotificationController;
 use App\Http\Controllers\App\SetupController;
+use App\Http\Controllers\App\ShiftManagementController;
 use App\Http\Controllers\App\StoreSettingsController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
@@ -239,6 +240,18 @@ Route::middleware(['auth', 'store.setup'])->group(function () {
         Route::post('/setup', [SetupController::class, 'store'])->name('setup.store');
         Route::post('/setup/ulang', [SetupController::class, 'restart'])->name('setup.restart');
         Route::post('/setup/batal', [SetupController::class, 'cancel'])->name('setup.cancel');
+
+        // Shift Kasir (back office): satu shift berisi banyak kasir, dibuat & dikelola admin.
+        Route::controller(ShiftManagementController::class)->prefix('shifts')->name('shifts.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::get('/{shift}', 'show')->name('show');
+            Route::post('/{shift}/members', 'addMember')->name('members.add');
+            Route::delete('/{shift}/members/{user}', 'removeMember')->name('members.remove');
+            Route::put('/{shift}/supervisor', 'setSupervisor')->name('supervisor');
+            Route::post('/{shift}/close', 'close')->name('close');
+            Route::delete('/{shift}', 'destroy')->name('destroy');
+        });
 
         Route::get('/pengaturan-toko', [StoreSettingsController::class, 'edit'])->name('store-settings.edit');
         Route::put('/pengaturan-toko', [StoreSettingsController::class, 'update'])->name('store-settings.update');

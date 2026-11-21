@@ -18,11 +18,69 @@
             @endif
         </div>
 
-        @if (! $activeShift)
+        @if (! $activeShift && $pendingShift)
+            {{-- Tergabung di shift bersama yang belum dibuka --}}
+            @php $iAmSupervisor = $pendingShift->isSupervisor(auth()->id()); @endphp
+            <div class="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Shift Anda</p>
+                        <p class="mt-1 text-lg font-semibold text-gray-800 dark:text-white/90">{{ $pendingShift->label() }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Penanggung jawab: {{ $pendingShift->supervisor?->name ?? '-' }}</p>
+                    </div>
+                    <x-ui.badge size="sm" color="warning">Belum dibuka</x-ui.badge>
+                </div>
+
+                <div class="mt-4 flex flex-wrap gap-2">
+                    @foreach ($pendingShift->members as $member)
+                        @php $isMe = $member->id === auth()->id(); @endphp
+                        <span @class([
+                            'inline-flex items-center gap-2 rounded-full py-1 ps-1 pe-3 text-sm',
+                            'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300' => $isMe,
+                            'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-300' => ! $isMe,
+                        ])>
+                            <span class="flex size-6 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">{{ mb_strtoupper(mb_substr($member->name, 0, 1)) }}</span>
+                            {{ $member->name }}{{ $isMe ? ' (Anda)' : '' }}
+                            @if ($pendingShift->isSupervisor($member->id))
+                                <span class="text-xs font-medium text-warning-600 dark:text-orange-400">· PJ</span>
+                            @endif
+                        </span>
+                    @endforeach
+                </div>
+
+                @if ($iAmSupervisor)
+                    {{-- Penanggung jawab membuka shift: hitung uang di laci lalu isi modal awal --}}
+                    <form method="POST" action="{{ route('kasir.shift.open') }}" class="mt-6 space-y-4 border-t border-gray-100 pt-5 dark:border-gray-800"
+                        x-data="ajaxForm({ regions: ['shift-page'] })" x-on:submit.prevent="submit">
+                        @csrf
+                        <p class="text-sm text-gray-600 dark:text-gray-300">
+                            Anda penanggung jawab shift ini. Hitung uang di laci, isi modal awal, lalu buka shift agar semua kasir bisa berjualan.
+                        </p>
+                        <x-common.form.field label="Modal Awal Kas" for="opening_cash" required>
+                            <x-common.form.money id="opening_cash" name="opening_cash" :value="old('opening_cash', 0)" :invalid="$errors->has('opening_cash')" required />
+                        </x-common.form.field>
+                        <x-common.form.field label="Catatan (Opsional)" for="open_notes">
+                            <x-ui.input id="open_notes" type="text" name="notes" value="{{ old('notes') }}" placeholder="mis. Uang kembalian dari brankas" />
+                        </x-common.form.field>
+                        <x-ui.button type="submit" class="w-full" x-bind:disabled="busy">
+                            <x-svg.spinner class="size-4" x-show="busy" x-cloak />
+                            <span x-text="busy ? 'Membuka shift…' : 'Buka Shift'">Buka Shift</span>
+                        </x-ui.button>
+                    </form>
+                @else
+                    <p class="mt-6 rounded-lg bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:bg-warning-500/10 dark:text-warning-300">
+                        Menunggu <strong>{{ $pendingShift->supervisor?->name ?? 'penanggung jawab' }}</strong> membuka shift.
+                        Setelah dibuka, Anda bisa langsung berjualan.
+                    </p>
+                @endif
+            </div>
+        @elseif (! $activeShift)
             {{-- Form Buka Shift --}}
             <div class="max-w-lg rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/3">
-                <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Buka Shift Baru</h3>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Masukkan jumlah uang tunai awal di laci kas sebelum mulai melayani transaksi.</p>
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-white/90">Belum Tergabung di Shift</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Minta admin menambahkan Anda ke shift yang sedang berjalan, atau buka shift sendiri dengan modal awal di bawah ini.
+                </p>
 
                 <form method="POST" action="{{ route('kasir.shift.open') }}" class="mt-5 space-y-4"
                     x-data="ajaxForm({ regions: ['shift-page'] })" x-on:submit.prevent="submit">
@@ -39,6 +97,40 @@
                 </form>
             </div>
         @else
+            {{-- Shift yang sedang diikuti + siapa saja kasir di dalamnya --}}
+            <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Shift Anda</p>
+                        <p class="mt-1 text-lg font-semibold text-gray-800 dark:text-white/90">{{ $activeShift->label() }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            Dibuka {{ $activeShift->opened_at->format('d/m H:i') }} oleh {{ $activeShift->openedBy?->name ?? '-' }}
+                            · penanggung jawab {{ $activeShift->supervisor?->name ?? '-' }}
+                        </p>
+                    </div>
+                    <x-ui.badge size="sm" color="success">Berjalan</x-ui.badge>
+                </div>
+                <div class="mt-4">
+                    <p class="mb-2 text-xs font-medium text-gray-500 uppercase dark:text-gray-400">Kasir di shift ini ({{ $activeShift->members->count() }})</p>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach ($activeShift->members as $member)
+                            @php $isMe = $member->id === auth()->id(); @endphp
+                            <span @class([
+                                'inline-flex items-center gap-2 rounded-full py-1 ps-1 pe-3 text-sm',
+                                'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300' => $isMe,
+                                'bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-300' => ! $isMe,
+                            ])>
+                                <span class="flex size-6 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">{{ mb_strtoupper(mb_substr($member->name, 0, 1)) }}</span>
+                                {{ $member->name }}{{ $isMe ? ' (Anda)' : '' }}
+                                @if ($activeShift->isSupervisor($member->id))
+                                    <span class="text-xs font-medium text-warning-600 dark:text-orange-400">· PJ</span>
+                                @endif
+                            </span>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
             {{-- Ringkasan Shift Aktif (X-Report). id = region yang diperbarui ajaxForm setelah mutasi kas. --}}
             <div id="shift-summary" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/3">
@@ -110,7 +202,17 @@
                     @endif
                 </div>
 
-                {{-- Tutup Shift (Blind Closing) --}}
+                {{-- Tutup Shift (Blind Closing). Hanya penanggung jawab (atau admin) yang menutup shift. --}}
+                @if (! $canClose)
+                    <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/3">
+                        <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Tutup Shift</h3>
+                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                            Shift ini berisi {{ $activeShift->members->count() }} kasir dengan satu laci kas bersama.
+                            Penutupan shift dan penghitungan kas dilakukan oleh penanggung jawab,
+                            <strong class="text-gray-700 dark:text-gray-300">{{ $activeShift->supervisor?->name ?? '-' }}</strong>.
+                        </p>
+                    </div>
+                @else
                 <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/3">
                     <h3 class="text-base font-semibold text-gray-800 dark:text-white/90">Tutup Shift (Z-Report)</h3>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Hitung uang fisik di laci kas per pecahan (atau isi totalnya) untuk menutup shift.</p>
@@ -127,6 +229,7 @@
                         </x-ui.button>
                     </form>
                 </div>
+                @endif
             </div>
         @endif
 
@@ -145,7 +248,7 @@
                 <div class="mt-4 divide-y divide-gray-100 dark:divide-gray-800">
                     @foreach ($otherActiveShifts as $other)
                         <div class="flex items-center justify-between gap-3 py-2.5 text-sm">
-                            <span class="font-medium text-gray-800 dark:text-white/90">{{ $other->user?->name ?? '-' }}</span>
+                            <span class="font-medium text-gray-800 dark:text-white/90">{{ $other->label() }}</span>
                             <span class="text-gray-500 dark:text-gray-400">Buka {{ $other->opened_at->format('d/m H:i') }} · {{ $other->outbounds_count }} transaksi</span>
                         </div>
                     @endforeach
@@ -157,7 +260,7 @@
         <x-common.table-card title="Riwayat Shift Sebelumnya" :paginator="$history">
             <thead class="border-y border-gray-100 dark:border-gray-800">
                 <tr>
-                    <th class="table-th">Kasir</th>
+                    <th class="table-th">Shift / Kasir</th>
                     <th class="table-th">Buka - Tutup</th>
                     <th class="table-th">Modal Awal</th>
                     <th class="table-th">Est. Kas</th>
@@ -169,7 +272,11 @@
             <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                 @forelse ($history as $row)
                     <tr class="table-row">
-                        <td class="table-td font-medium text-gray-800 dark:text-white/90">{{ $row->user?->name ?? '-' }}</td>
+                        <td class="table-td font-medium text-gray-800 dark:text-white/90">{{ $row->label() }}
+                            @if (filled($row->name))
+                                <span class="block text-xs font-normal text-gray-500 dark:text-gray-400">{{ $row->members->pluck('name')->implode(', ') }}</span>
+                            @endif
+                        </td>
                         <td class="table-td text-xs text-gray-500 dark:text-gray-400">
                             {{ $row->opened_at->format('d/m/Y H:i') }} – {{ $row->closed_at?->format('H:i') }}
                         </td>

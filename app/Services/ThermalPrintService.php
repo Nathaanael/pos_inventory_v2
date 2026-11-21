@@ -249,7 +249,10 @@ class ThermalPrintService
             $printer->text(str_repeat('-', self::LINE_WIDTH) . "\n");
 
             $printer->setJustification(Printer::JUSTIFY_LEFT);
-            $printer->text("Kasir  : " . ($shift->user?->name ?? '-') . "\n");
+            if (filled($shift->name)) {
+                $printer->text("Shift  : " . $shift->name . "\n");
+            }
+            $printer->text("Kasir  : " . ($shift->members->pluck('name')->implode(', ') ?: ($shift->user?->name ?? '-')) . "\n");
             $printer->text("Buka   : " . $shift->opened_at->format('d/m/Y H:i') . "\n");
             if ($shift->closed_at) {
                 $printer->text("Tutup  : " . $shift->closed_at->format('d/m/Y H:i') . "\n");

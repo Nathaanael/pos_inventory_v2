@@ -26,10 +26,11 @@ class CashCountController extends Controller
         $status = (string) $request->query('status');
 
         $counts = CashCount::query()
-            ->with(['shift.user:id,name', 'countedBy:id,name'])
+            ->with(['shift.user:id,name', 'shift.members:id,name', 'countedBy:id,name'])
             ->when($search !== '', fn ($q) => $q->where(fn ($q) => $q
                 ->where('code', 'like', "%{$search}%")
-                ->orWhereHas('shift.user', fn ($u) => $u->where('name', 'like', "%{$search}%"))))
+                ->orWhereHas('shift', fn ($s) => $s->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('shift.members', fn ($u) => $u->where('name', 'like', "%{$search}%"))))
             ->when(array_key_exists($status, $this->statusOptions()), fn ($q) => $q->where('status', $status))
             ->latest('counted_at')
             ->latest('id')
@@ -38,7 +39,7 @@ class CashCountController extends Controller
 
         $activeShifts = CashierShift::query()
             ->open()
-            ->with('user:id,name')
+            ->with(['user:id,name', 'members:id,name'])
             ->withCount('outbounds')
             ->withMax('cashCounts', 'counted_at')
             ->oldest('opened_at')
@@ -63,7 +64,7 @@ class CashCountController extends Controller
 
         return view('pages.inventory.cash-counts.form', [
             'title' => 'Hitung Kas',
-            'shift' => $shift->load('user:id,name'),
+            'shift' => $shift->load(['user:id,name', 'members:id,name']),
         ]);
     }
 
@@ -86,7 +87,7 @@ class CashCountController extends Controller
     {
         return view('pages.inventory.cash-counts.show', [
             'title' => 'Detail Hitung Kas',
-            'count' => $cashCount->load(['shift.user:id,name', 'countedBy:id,name', 'reviewedBy:id,name']),
+            'count' => $cashCount->load(['shift.user:id,name', 'shift.members:id,name', 'countedBy:id,name', 'reviewedBy:id,name']),
         ]);
     }
 

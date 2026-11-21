@@ -3,16 +3,14 @@
 namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
-use App\Models\CashCount;
 use App\Models\CashierShift;
 use App\Models\CashMovement;
-use App\Models\StoreSetting;
+use App\Services\ShiftService;
 use App\Services\ThermalPrintService;
 use App\Support\CashDenominations;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Throwable;
@@ -25,11 +23,14 @@ class ShiftController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
-        $activeShift = CashierShift::activeFor($user->id);
+        $activeShift = CashierShift::activeFor($user->id)?->load(['members:id,name,role', 'openedBy:id,name', 'supervisor:id,name']);
+        // Shift bersama yang diikuti tapi belum dibuka penanggung jawab.
+        $pendingShift = $activeShift ? null : CashierShift::pendingFor($user->id)?->load(['members:id,name,role', 'supervisor:id,name']);
 
         $history = CashierShift::query()
-            ->with('user:id,name')
-            ->when(! $user->isAdmin(), fn ($q) => $q->where('user_id', $user->id))
+            ->with(['user:id,name', 'members:id,name'])
+            // Kasir: shift yang pernah ia ikuti; admin: semua shift.
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereHas('members', fn ($m) => $m->where('users.id', $user->id)))
             ->where('status', CashierShift::STATUS_CLOSED)
             ->latest('closed_at')
             ->paginate(10)
@@ -38,6 +39,7 @@ class ShiftController extends Controller
         return view('pages.kasir.shift', [
             'title' => 'Shift Kasir',
             'activeShift' => $activeShift,
+            'pendingShift' => $pendingShift,
             'summary' => $activeShift?->summary(),
             'movements' => $activeShift ? $activeShift->movements()->with('createdBy:id,name')->get() : collect(),
             'history' => $history,
@@ -45,12 +47,16 @@ class ShiftController extends Controller
             'showExpected' => $user->isAdmin(),
             // Admin melihat semua shift yang sedang berjalan (semua kasir).
             'otherActiveShifts' => $user->isAdmin()
-                ? CashierShift::query()->open()->where('user_id', '!=', $user->id)->with('user:id,name')->withCount('outbounds')->oldest('opened_at')->get()
+                ? CashierShift::query()->open()
+                    ->whereDoesntHave('members', fn ($m) => $m->where('users.id', $user->id))
+                    ->with(['user:id,name', 'members:id,name'])->withCount('outbounds')->oldest('opened_at')->get()
                 : collect(),
+            // Hanya penanggung jawab shift (atau admin) yang menutup shift.
+            'canClose' => $activeShift && ($user->isAdmin() || $activeShift->isSupervisor($user->id)),
         ]);
     }
 
-    public function open(Request $request): RedirectResponse|JsonResponse
+    public function open(Request $request, ShiftService $shifts): RedirectResponse|JsonResponse
     {
         $user = $request->user();
 
@@ -65,8 +71,22 @@ class ShiftController extends Controller
             'opening_cash' => 'Modal Awal Kas',
         ]);
 
+        // Tergabung di shift bersama yang belum dibuka: hanya penanggung jawab yang boleh membukanya.
+        if ($pending = CashierShift::pendingFor($user->id)) {
+            if (! $pending->isSupervisor($user->id)) {
+                return $this->respondError($request, ['Menunggu penanggung jawab', 'Shift ini dibuka oleh '.($pending->supervisor?->name ?? 'penanggung jawab').'.'], 403);
+            }
+
+            if (! $shifts->open($pending, (float) $data['opening_cash'], $data['notes'] ?? null, $user)) {
+                return $this->respondError($request, ['Shift sudah dibuka', 'Shift ini sudah berjalan.']);
+            }
+
+            return $this->respond($request, ['Shift dibuka', 'Kasir lain di shift ini sekarang bisa berjualan.']);
+        }
+
         CashierShift::create([
             'user_id' => $user->id,
+            'opened_by' => $user->id,
             'opened_at' => now(),
             'opening_cash' => $data['opening_cash'],
             'status' => CashierShift::STATUS_OPEN,
@@ -104,50 +124,32 @@ class ShiftController extends Controller
         return $this->respond($request, 'Mutasi kas berhasil dicatat.');
     }
 
-    public function close(Request $request): RedirectResponse|JsonResponse
+    public function close(Request $request, ShiftService $shifts): RedirectResponse|JsonResponse
     {
-        $shift = CashierShift::activeFor($request->user()->id);
+        $user = $request->user();
+        $shift = CashierShift::activeFor($user->id);
         if (! $shift) {
             return $this->respondError($request, ['Belum ada shift aktif', 'Tidak ada shift yang bisa ditutup.']);
         }
 
+        // Shift ditutup oleh penanggung jawabnya (atau admin).
+        if (! $shift->isSupervisor($user->id) && ! $user->isAdmin()) {
+            return $this->respondError($request, ['Hanya penanggung jawab', 'Shift ini ditutup oleh '.($shift->supervisor?->name ?? 'penanggung jawab').'.'], 403);
+        }
+
         // Uang fisik: per pecahan atau total langsung (lihat CashDenominations).
-        $data = CashDenominations::validate($request);
-
-        DB::transaction(function () use ($shift, $data, $request) {
-            $locked = CashierShift::lockForUpdate()->findOrFail($shift->id);
-            if ($locked->status !== CashierShift::STATUS_OPEN) {
-                return;
-            }
-
-            $summary = $locked->summary();
-            $expected = (float) $summary['expected_cash'];
-            $actual = $data['actual_cash'];
-
-            $locked->update([
-                'closed_at' => now(),
-                'expected_cash' => $expected,
-                'actual_cash' => $actual,
-                'cash_difference' => $actual - $expected,
-                'status' => CashierShift::STATUS_CLOSED,
-                'notes' => $data['notes'] ?? $locked->notes,
-            ]);
-
-            // Modul FNB: tutup shift otomatis tercatat di Hitung Kas (selisih di luar toleransi → perlu review admin).
-            if (StoreSetting::usesCashCount()) {
-                CashCount::record($locked, CashCount::TYPE_CLOSING, $actual, $data['denominations'], $request->user()->id, $data['notes'], $summary);
-            }
-        });
+        $shifts->close($shift, CashDenominations::validate($request), $user);
 
         return $this->respond($request, 'Shift kasir berhasil ditutup (Z-Report tersimpan).');
     }
 
     public function printReport(Request $request, CashierShift $shift, ThermalPrintService $printer): RedirectResponse|JsonResponse
     {
-        abort_unless($request->user()->isAdmin() || (int) $shift->user_id === (int) $request->user()->id, 403);
+        $user = $request->user();
+        abort_unless($user->isAdmin() || $shift->members()->where('users.id', $user->id)->exists(), 403);
 
         try {
-            $shift->load('user');
+            $shift->load(['user', 'members']);
             // Blind closing: kasir tidak melihat estimasi kas laci selama shift masih berjalan.
             $printer->printShiftReport($shift, showExpected: $request->user()->isAdmin() || $shift->status === CashierShift::STATUS_CLOSED);
         } catch (Throwable $e) {

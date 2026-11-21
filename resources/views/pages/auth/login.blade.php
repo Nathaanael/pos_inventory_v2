@@ -41,7 +41,9 @@
                         <p class="text-sm text-gray-500 dark:text-gray-400">Masukkan email dan password untuk masuk ke aplikasi.</p>
                     </div>
 
-                    <form method="POST" action="{{ route('login.store') }}" class="space-y-5">
+                    {{-- formLoading: tombol Masuk menampilkan spinner sampai halaman berikutnya terbuka (cegah klik dobel). --}}
+                    <form method="POST" action="{{ route('login.store') }}" class="space-y-5"
+                        x-data="formLoading" x-on:submit="start($event)">
                         @csrf
 
                         <x-common.form.field label="Email" for="email" required>
@@ -68,7 +70,10 @@
                             Ingat saya
                         </label>
 
-                        <x-ui.button type="submit" class="w-full" size="lg">Masuk</x-ui.button>
+                        <x-ui.button type="submit" class="w-full" size="lg" x-bind:disabled="loading" x-bind:aria-busy="loading">
+                            <x-svg.spinner class="size-5" x-show="loading" x-cloak />
+                            <span x-text="loading ? 'Memproses…' : 'Masuk'">Masuk</span>
+                        </x-ui.button>
                     </form>
                 </div>
             </div>

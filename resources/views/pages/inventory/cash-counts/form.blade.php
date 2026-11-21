@@ -7,7 +7,7 @@
     @include('pages.inventory.partials.form-errors')
 
     <div class="mx-auto max-w-2xl">
-        <x-common.component-card title="Cek Dadakan Kas — {{ $shift->user?->name ?? '-' }}"
+        <x-common.component-card title="Cek Dadakan Kas — {{ $shift->label() }}"
             desc="Shift dibuka {{ $shift->opened_at->format('d/m/Y H:i') }}. Hitung uang di laci; angka sistem dan selisih tampil setelah disimpan.">
             <form method="POST" action="{{ route('cash-counts.store', $shift) }}" class="space-y-5"
                 x-data="ajaxForm()" x-on:submit.prevent="submit">
