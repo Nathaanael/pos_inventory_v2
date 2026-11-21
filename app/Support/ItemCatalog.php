@@ -17,13 +17,14 @@ class ItemCatalog
     public static function forForms(): array
     {
         return Item::query()
-            ->with('itemSuppliers')
+            ->with(['itemSuppliers', 'unit:id,name'])
             ->orderBy('name')
             ->get()
             ->map(fn (Item $item) => [
                 'id' => $item->id,
                 'name' => $item->name,
                 'code' => $item->code,
+                'unit' => $item->unit?->name, // ditampilkan di samping kuantitas (mis. "kg", "pcs")
                 'stock' => (int) $item->current_stock,
                 'harga_beli' => (float) $item->harga_beli,
                 'harga_jual_retail' => (float) $item->harga_jual_retail,

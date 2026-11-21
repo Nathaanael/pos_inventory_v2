@@ -18,7 +18,12 @@ export default ({ catalog = [], supplierId = '', rows = [] } = {}) => ({
         const sid = this.supplierId;
         return this.catalog
             .filter((item) => !sid || item.suppliers[sid])
-            .map((item) => ({ value: String(item.id), label: item.name, description: item.code }));
+            .map((item) => ({ value: String(item.id), label: item.name, description: [item.code, item.unit].filter(Boolean).join(' · ') }));
+    },
+
+    /** Nama satuan barang di baris (mis. "kg"), kosong bila belum memilih barang. */
+    unit(row) {
+        return this.items[row.item_id]?.unit ?? '';
     },
 
     price(row) {

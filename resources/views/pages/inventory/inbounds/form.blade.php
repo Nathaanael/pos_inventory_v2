@@ -65,11 +65,18 @@
                                 <x-common.form.search-select options="itemOptions" model="row.item_id" bind-name="`items[${index}][item_id]`"
                                     placeholder="Pilih barang" required />
                             </x-common.form.field>
+                            {{-- Kuantitas boleh desimal (kg, gram, liter); satuan barang tampil di sampingnya. --}}
                             <x-common.form.field label="Kuantitas" required>
-                                <x-ui.input type="number" min="1" x-bind:name="`items[${index}][quantity]`" x-model="row.quantity" required />
+                                <x-ui.input-group class="h-11">
+                                    <x-ui.input-group.input type="number" min="0" step="any" inputmode="decimal"
+                                        x-bind:name="`items[${index}][quantity]`" x-model="row.quantity" placeholder="0" required />
+                                    <x-ui.input-group.addon align="inline-end">
+                                        <span class="text-sm font-medium text-gray-600 dark:text-gray-300" x-text="unit(row) || 'satuan'"></span>
+                                    </x-ui.input-group.addon>
+                                </x-ui.input-group>
                             </x-common.form.field>
                             <x-common.form.field label="Harga Beli">
-                                <x-ui.input x-bind:value="rupiah(price(row))" readonly class="bg-gray-50 dark:bg-white/3" />
+                                <x-ui.input x-bind:value="rupiah(price(row)) + (unit(row) ? ' / ' + unit(row) : '')" readonly class="bg-gray-50 dark:bg-white/3" />
                             </x-common.form.field>
                             <x-common.form.field label="Subtotal">
                                 <x-ui.input x-bind:value="rupiah(subtotal(row))" readonly class="bg-gray-50 dark:bg-white/3" />

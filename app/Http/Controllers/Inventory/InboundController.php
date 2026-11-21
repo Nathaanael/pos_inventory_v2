@@ -122,7 +122,7 @@ class InboundController extends Controller
             'columns' => ['Barang', 'Kuantitas', 'Harga Beli', 'Subtotal'],
             'rows' => $inbound->items->map(fn ($line) => [
                 $line->item?->name ?? '-',
-                Format::number($line->quantity),
+                trim(Format::qty($line->quantity).' '.$line->item?->unit?->name),
                 Format::rupiah($line->buy_price),
                 Format::rupiah($line->subtotal),
             ])->all(),
@@ -223,7 +223,8 @@ class InboundController extends Controller
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.item_id' => ['required', Rule::exists('items', 'id')],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            // Desimal untuk satuan kg, gram, liter, dll. (maks. 4 digit di belakang koma).
+            'items.*.quantity' => ['required', 'numeric', 'gt:0', 'decimal:0,4'],
         ], [
             'items.required' => 'Tambahkan minimal satu barang.',
         ], [
@@ -244,7 +245,7 @@ class InboundController extends Controller
 
         $lines = collect($data['items'])->map(fn ($line) => [
             'item_id' => (int) $line['item_id'],
-            'quantity' => (int) $line['quantity'],
+            'quantity' => round((float) $line['quantity'], 4),
             'buy_price' => (float) ($prices[$line['item_id']] ?? $fallback[$line['item_id']] ?? 0),
         ])->values()->all();
 
